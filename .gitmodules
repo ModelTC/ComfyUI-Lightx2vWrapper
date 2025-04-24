@@ -1,0 +1,3 @@
+[submodule "lightx2v"]
+	path = lightx2v
+	url = https://github.com/ModelTC/lightx2v.git
