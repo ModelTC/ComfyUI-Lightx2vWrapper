@@ -1,13 +1,14 @@
 import os
 import torch
 import gc
-from typing import cast, no_type_check, Any
+from typing import cast, Any
 import logging
 import json
 import numpy as np
 import comfy.model_management as mm
 from comfy.utils import ProgressBar
-import folder_paths
+
+# import folder_paths
 from tqdm import tqdm
 from easydict import EasyDict
 
@@ -18,7 +19,6 @@ from .lightx2v.lightx2v.models.input_encoders.hf.t5.model import T5EncoderModel
 from .lightx2v.lightx2v.models.input_encoders.hf.xlm_roberta.model import (
     CLIPModel as ClipVisionModel,
 )
-from .lightx2v.lightx2v.utils.utils import seed_all
 from .lightx2v.lightx2v.models.video_encoders.hf.wan.vae import WanVAE
 from .lightx2v.lightx2v.models.networks.wan.model import WanModel
 from .lightx2v.lightx2v.models.networks.wan.lora_adapter import WanLoraWrapper
@@ -28,6 +28,95 @@ from .lightx2v.lightx2v.models.schedulers.wan.feature_caching.scheduler import (
 )
 
 
+class WanVideoTeaCache:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "rel_l1_thresh": (
+                    "FLOAT",
+                    {
+                        "default": 0.3,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.001,
+                        "tooltip": "Higher values will make TeaCache more aggressive, faster, but may cause artifacts. Good value range for 1.3B: 0.05 - 0.08, for other models 0.15-0.30",
+                    },
+                ),
+                "start_step": (
+                    "INT",
+                    {
+                        "default": 1,
+                        "min": 0,
+                        "max": 9999,
+                        "step": 1,
+                        "tooltip": "Start percentage of the steps to apply TeaCache",
+                    },
+                ),
+                "end_step": (
+                    "INT",
+                    {
+                        "default": -1,
+                        "min": -1,
+                        "max": 9999,
+                        "step": 1,
+                        "tooltip": "End steps to apply TeaCache",
+                    },
+                ),
+                "cache_device": (
+                    ["main_device", "offload_device"],
+                    {"default": "offload_device", "tooltip": "Device to cache to"},
+                ),
+                "use_coefficients": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": "Use calculated coefficients for more accuracy. When enabled therel_l1_thresh should be about 10 times higher than without",
+                    },
+                ),
+            },
+            "optional": {
+                "mode": (
+                    ["e", "e0"],
+                    {
+                        "default": "e",
+                        "tooltip": "Choice between using e (time embeds, default) or e0 (modulated time embeds)",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("LIGHT_TEACACHEARGS",)
+    RETURN_NAMES = ("teacache_args",)
+    FUNCTION = "process"
+    CATEGORY = "LightX2V"
+
+    EXPERIMENTAL = True
+
+    def process(
+        self,
+        rel_l1_thresh,
+        start_step,
+        end_step,
+        cache_device,
+        use_coefficients,
+        mode="e",
+    ):
+        if cache_device == "main_device":
+            teacache_device = mm.get_torch_device()
+        else:
+            teacache_device = mm.unet_offload_device()
+        teacache_args = {
+            "rel_l1_thresh": rel_l1_thresh,
+            "start_step": start_step,
+            "end_step": end_step,
+            "cache_device": teacache_device,
+            "use_coefficients": use_coefficients,
+            "mode": mode,
+        }
+        return (teacache_args,)
+
+
 class Lightx2vWanVideoT5EncoderLoader:
     @classmethod
     def INPUT_TYPES(cls):
@@ -35,9 +124,16 @@ class Lightx2vWanVideoT5EncoderLoader:
             "required": {
                 "t5_model_path": (
                     "STRING",
-                    {"default": "models/t5/models_t5_umt5-xxl-enc-bf16.pth"},
+                    {
+                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/models_t5_umt5-xxl-enc-bf16.pth"
+                    },
                 ),
-                "tokenizer_path": ("STRING", {"default": "models/t5/google/umt5-xxl"}),
+                "tokenizer_path": (
+                    "STRING",
+                    {
+                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/google/umt5-xxl"
+                    },
+                ),
                 "text_len": (
                     "INT",
                     {"default": 512, "min": 64, "max": 2048, "step": 1},
@@ -99,10 +195,16 @@ class Lightx2vWanVideoT5Encoder:
                     "STRING",
                     {
                         "multiline": True,
-                        "default": "A beautiful landscape with mountains and a lake",
+                        "default": "Summer beach vacation style, a white cat wearing sunglasses sits on a surfboard. The fluffy-furred feline gazes directly at the camera with a relaxed expression. Blurred beach scenery forms the background featuring crystal-clear waters, distant green hills, and a blue sky dotted with white clouds. The cat assumes a naturally relaxed posture, as if savoring the sea breeze and warm sunlight. A close-up shot highlights the feline's intricate details and the refreshing atmosphere of the seaside.",
                     },
                 ),
-                "negative_prompt": ("STRING", {"multiline": True, "default": ""}),
+                "negative_prompt": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+                    },
+                ),
             }
         }
 
@@ -129,56 +231,9 @@ class Lightx2vWanVideoT5Encoder:
         # Create text embeddings dictionary
         text_embeddings = {"context": context, "context_null": context_null}
 
+        print(f"Text Encoder Output Shape: {context[0].shape}")
+
         return (text_embeddings,)
-
-
-class Lightx2vWanVideoClipVisionEncoderLoader:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "clip_model_path": (
-                    "STRING",
-                    {
-                        "default": "models/clip/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
-                    },
-                ),
-                "tokenizer_path": (
-                    "STRING",
-                    {"default": "models/clip/xlm-roberta-large"},
-                ),
-                "precision": (["fp16", "fp32"], {"default": "fp16"}),
-                "device": (["cuda", "cpu"], {"default": "cuda"}),
-            }
-        }
-
-    RETURN_TYPES = ("LIGHT_CLIP_VISION_ENCODER",)
-    RETURN_NAMES = ("clip_vision_encoder",)
-    FUNCTION = "load_clip_vision_encoder"
-    CATEGORY = "LightX2V"
-
-    def load_clip_vision_encoder(
-        self, clip_model_path, tokenizer_path, precision, device
-    ):
-        # Map precision to torch dtype
-        dtype_map = {"fp16": torch.float16, "fp32": torch.float32}
-        dtype = dtype_map[precision]
-
-        # Resolve device
-        if device == "cuda":
-            device = mm.get_torch_device()
-        else:
-            device = torch.device("cpu")
-
-        # Load the CLIP vision encoder
-        clip_vision_encoder = ClipVisionModel(
-            dtype=dtype,
-            device=device,
-            checkpoint_path=clip_model_path,
-            tokenizer_path=tokenizer_path,
-        )
-
-        return (clip_vision_encoder,)
 
 
 class Lightx2vWanVideoVaeLoader:
@@ -186,7 +241,12 @@ class Lightx2vWanVideoVaeLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "vae_model_path": ("STRING", {"default": "models/vae/Wan2.1_VAE.pth"}),
+                "vae_model_path": (
+                    "STRING",
+                    {
+                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/Wan2.1_VAE.pth"
+                    },
+                ),
                 "precision": (["bf16", "fp16", "fp32"], {"default": "fp16"}),
                 "device": (["cuda", "cpu"], {"default": "cuda"}),
                 "parallel": ("BOOLEAN", {"default": False}),
@@ -230,23 +290,18 @@ class Lightx2vWanVideoVaeDecoder:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "vae": ("LIGHT_WAN_VAE",),
+                "wan_vae": ("LIGHT_WAN_VAE",),
                 "latent": ("LIGHT_LATENT",),
             }
         }
 
     RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_NAMES = ("images",)
     FUNCTION = "decode_latent"
     CATEGORY = "LightX2V"
 
-    def decode_latent(self, vae, latent):
-        # 创建一个带有必要属性的配置对象
-        class Config:
-            def __init__(self, cpu_offload=False):
-                self.cpu_offload = cpu_offload
-
-        config = Config(cpu_offload=False)
+    def decode_latent(self, wan_vae, latent):
+        config = EasyDict({"cpu_offload": False})
 
         # 获取潜在表示和生成器
         latents = latent["samples"]
@@ -255,7 +310,7 @@ class Lightx2vWanVideoVaeDecoder:
         # 使用VAE解码潜在表示
         with torch.no_grad():
             # 解码得到视频帧
-            decoded_images = vae.decode(latents, generator=generator, config=config)
+            decoded_images = wan_vae.decode(latents, generator=generator, config=config)
 
             # 将像素值从 [-1, 1] 归一化到 [0, 1]
             images = (decoded_images + 1) / 2
@@ -274,24 +329,95 @@ class Lightx2vWanVideoVaeDecoder:
         return (images,)
 
 
+class Lightx2vWanVideoClipVisionEncoderLoader:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "clip_model_path": (
+                    "STRING",
+                    {
+                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
+                    },
+                ),
+                "tokenizer_path": (
+                    "STRING",
+                    {
+                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/xlm-roberta-large"
+                    },
+                ),
+                "precision": (["fp16", "fp32"], {"default": "fp16"}),
+                "device": (["cuda", "cpu"], {"default": "cuda"}),
+            }
+        }
+
+    RETURN_TYPES = ("LIGHT_CLIP_VISION_ENCODER",)
+    RETURN_NAMES = ("clip_vision_encoder",)
+    FUNCTION = "load_clip_vision_encoder"
+    CATEGORY = "LightX2V"
+
+    def load_clip_vision_encoder(
+        self, clip_model_path, tokenizer_path, precision, device
+    ):
+        # Map precision to torch dtype
+        dtype_map = {"fp16": torch.float16, "fp32": torch.float32}
+        dtype = dtype_map[precision]
+
+        # Resolve device
+        if device == "cuda":
+            device = mm.get_torch_device()
+        else:
+            device = torch.device("cpu")
+
+        # Load the CLIP vision encoder
+        clip_vision_encoder = ClipVisionModel(
+            dtype=dtype,
+            device=device,
+            checkpoint_path=clip_model_path,
+            tokenizer_path=tokenizer_path,
+        )
+
+        return (clip_vision_encoder,)
+
+
 class Lightx2vWanVideoImageEncoder:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "vae": ("LIGHT_WAN_VAE",),
-                "image": ("IMAGE",),
                 "clip_vision_encoder": ("LIGHT_CLIP_VISION_ENCODER",),
-                "target_height": (
+                "image": ("IMAGE",),
+                "width": (
                     "INT",
-                    {"default": 576, "min": 256, "max": 1024, "step": 8},
+                    {
+                        "default": 832,
+                        "min": 64,
+                        "max": 2048,
+                        "step": 8,
+                        "tooltip": "Width of the image to encode",
+                    },
                 ),
-                "target_width": (
+                "height": (
                     "INT",
-                    {"default": 1024, "min": 256, "max": 1024, "step": 8},
+                    {
+                        "default": 480,
+                        "min": 64,
+                        "max": 29048,
+                        "step": 8,
+                        "tooltip": "Height of the image to encode",
+                    },
                 ),
-                "vae_stride": ("INT", {"default": 8, "min": 1, "max": 32, "step": 1}),
-                "patch_size": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1}),
+                "num_frames": (
+                    "INT",
+                    {
+                        "default": 81,
+                        "min": 1,
+                        "max": 10000,
+                        "step": 4,
+                        "tooltip": "Number of frames to encode",
+                    },
+                ),
             }
         }
 
@@ -305,28 +431,24 @@ class Lightx2vWanVideoImageEncoder:
         vae,
         image,
         clip_vision_encoder,
-        target_height,
-        target_width,
-        vae_stride,
-        patch_size,
+        height,
+        width,
+        num_frames,
     ):
         # 创建配置对象
-        class Config:
-            def __init__(
-                self,
-                target_height,
-                target_width,
-                vae_stride,
-                patch_size,
-                cpu_offload=False,
-            ):
-                self.target_height = target_height
-                self.target_width = target_width
-                self.vae_stride = [1, vae_stride, vae_stride]
-                self.patch_size = [1, patch_size, patch_size]
-                self.cpu_offload = cpu_offload
 
-        config = Config(target_height, target_width, vae_stride, patch_size)
+        config = EasyDict(
+            {
+                "cpu_offload": False,
+                "target_height": height,
+                "target_width": width,
+                "target_video_length": num_frames,
+                "vae_stride": (4, 8, 8),
+                "patch_size": (1, 2, 2),
+            }
+        )
+        # skip lint
+        config = cast(Any, config)
 
         # 将图像转换为期望的张量格式
         device = mm.get_torch_device()
@@ -334,9 +456,11 @@ class Lightx2vWanVideoImageEncoder:
         img = img.sub_(0.5).div_(0.5)  # 归一化到 [-1, 1]
 
         # 使用CLIP视觉编码器编码图像
-        clip_encoder_out = clip_vision_encoder.visual(
-            [img[:, None, :, :]], config
-        ).squeeze(0)
+        clip_encoder_out = (
+            clip_vision_encoder.visual([img[:, None, :, :]], config)
+            .squeeze(0)
+            .to(torch.bfloat16)
+        )
 
         # 计算宽高比和尺寸
         h, w = img.shape[1:]
@@ -354,10 +478,15 @@ class Lightx2vWanVideoImageEncoder:
             // config.patch_size[2]
             * config.patch_size[2]
         )
+
+        # XXX: trick
+        config.lat_h = lat_h
+        config.lat_w = lat_w
+
         h = lat_h * config.vae_stride[1]
         w = lat_w * config.vae_stride[2]
 
-        # 创建掩码
+        # TODO(xxx)：81？
         msk = torch.ones(1, 81, lat_h, lat_w, device=device)
         msk[:, 1:] = 0
         msk = torch.concat(
@@ -366,7 +495,6 @@ class Lightx2vWanVideoImageEncoder:
         msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w)
         msk = msk.transpose(1, 2)[0]
 
-        # 使用VAE编码图像
         resized_img = torch.nn.functional.interpolate(
             img[None].cpu(), size=(h, w), mode="bicubic"
         ).transpose(0, 1)
@@ -374,18 +502,80 @@ class Lightx2vWanVideoImageEncoder:
         concat_img = torch.concat([resized_img.to(device), padding], dim=1)
 
         vae_encode_out = vae.encode([concat_img], config)[0]
+
         # TODO(xxx): hard code
         vae_encode_out = torch.concat([msk, vae_encode_out]).to(torch.bfloat16)
 
-        # 创建图像嵌入字典
         image_embeddings = {
             "clip_encoder_out": clip_encoder_out,
             "vae_encode_out": vae_encode_out,
-            "lat_h": lat_h,
-            "lat_w": lat_w,
+            "config": config,
         }
 
+        print(f"Image Encoder Output Shape: {clip_encoder_out.shape}")
+        print(f"VAE Encoder Output Shape: {vae_encode_out.shape}")
+        print(f"Latent Height: {lat_h}, Latent Width: {lat_w}")
+        print(f"Image Shape: {img.shape}")
+        print(f"Configuration: {config}")
+
         return (image_embeddings,)
+
+
+class Lightx2vWanVideoEmptyEmbeds:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "width": (
+                    "INT",
+                    {
+                        "default": 832,
+                        "min": 64,
+                        "max": 2048,
+                        "step": 8,
+                        "tooltip": "Width of the image to encode",
+                    },
+                ),
+                "height": (
+                    "INT",
+                    {
+                        "default": 480,
+                        "min": 64,
+                        "max": 29048,
+                        "step": 8,
+                        "tooltip": "Height of the image to encode",
+                    },
+                ),
+                "num_frames": (
+                    "INT",
+                    {
+                        "default": 81,
+                        "min": 1,
+                        "max": 10000,
+                        "step": 4,
+                        "tooltip": "Number of frames to encode",
+                    },
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("LIGHT_IMAGE_EMBEDDINGS",)
+    RETURN_NAMES = ("image_embeddings",)
+    FUNCTION = "process"
+    CATEGORY = "LightX2V"
+
+    def process(self, num_frames, width, height, control_embeds=None):
+        config = EasyDict(
+            {
+                "target_height": height,
+                "target_width": width,
+                "target_video_length": num_frames,
+                "vae_stride": (4, 8, 8),
+                "patch_size": (1, 2, 2),
+            }
+        )
+
+        return ({"config": config},)
 
 
 class Lightx2vWanVideoModelLoader:
@@ -393,29 +583,24 @@ class Lightx2vWanVideoModelLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model_path": ("STRING", {"default": "models/wan"}),
-                "model_type": (["t2v", "i2v"], {"default": "t2v"}),
-                "precision": (["bf16", "fp16", "fp32"], {"default": "bf16"}),
-                "device": (["cuda", "cpu"], {"default": "cuda"}),
-                "feature_caching": (["NoCaching", "Tea"], {"default": "Tea"}),
-                "teacache_thresh": (
-                    "FLOAT",
+                "model_path": (
+                    "STRING",
                     {
-                        "default": 0.26,
-                        "min": 0.0,
-                        "max": 1.0,
-                        "step": 0.01,
-                        "tooltip": "Only used with Tea feature caching",
+                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P"
                     },
                 ),
-                "attention_mode": (
-                    ["sdpa", "flash_attn_2", "flash_attn_3"],
-                    {"default": "flash_attn_3"},
+                "model_type": (["t2v", "i2v"], {"default": "i2v"}),
+                "precision": (["bf16", "fp16", "fp32"], {"default": "bf16"}),
+                "device": (["cuda", "cpu"], {"default": "cuda"}),
+                "attention_type": (
+                    ["sdpa", "flash_attn2", "flash_attn3"],
+                    {"default": "flash_attn3"},
                 ),
                 "cpu_offload": ("BOOLEAN", {"default": False}),
                 "mm_type": ("STRING", {"default": "Default"}),
             },
             "optional": {
+                "teacache_args": ("LIGHT_TEACACHEARGS", {"default": None}),
                 "lora_path": ("STRING", {"default": None}),
                 "lora_strength": (
                     "FLOAT",
@@ -435,12 +620,12 @@ class Lightx2vWanVideoModelLoader:
         model_type,
         precision,
         device,
-        feature_caching,
-        teacache_thresh,
-        attention_mode,
+        attention_type,
         mm_type,
         lora_path=None,
         lora_strength=1.0,
+        cpu_offload=False,
+        teacache_args=None,
     ):
         # 映射精度到torch dtype
         dtype_map = {
@@ -459,6 +644,7 @@ class Lightx2vWanVideoModelLoader:
         # 首先在模型路径中查找config.json
         model_path_dir = os.path.dirname(model_path)
         config_json_path = os.path.join(model_path_dir, "config.json")
+
         config_json = {}
         if os.path.exists(config_json_path):
             with open(config_json_path, "r") as f:
@@ -467,10 +653,16 @@ class Lightx2vWanVideoModelLoader:
             logging.error(f"Config file not found at {config_json_path}")
             raise FileNotFoundError(f"Config file not found at {config_json_path}")
 
+        feature_caching = "Tea" if teacache_args is not None else "NoCaching"
+        if teacache_args:
+            teacache_thresh = teacache_args["rel_l1_thresh"]
+        else:
+            teacache_thresh = 0.26
+
         # 创建配置字典
         config = {
             "do_mm_calib": False,
-            "cpu_offload": False,
+            "cpu_offload": cpu_offload,
             "parallel_attn_type": None,  # [None, "ulysses", "ring"]
             "parallel_vae": False,
             "max_area": False,
@@ -486,8 +678,9 @@ class Lightx2vWanVideoModelLoader:
             },
             "model_path": model_path,
             "task": model_type,
+            "model_cls": "wan2.1",
             "device": device,
-            "attention_type": attention_mode,
+            "attention_type": attention_type,
             "lora_path": lora_path if lora_path and lora_path.strip() else None,
             "strength_model": lora_strength,
         }
@@ -495,10 +688,7 @@ class Lightx2vWanVideoModelLoader:
         config.update(**config_json)
         # NOTE(xxx): adapt to Lightx2v
         config = EasyDict(config)
-
-        logging.info(
-            "Loaded config:\n" + json.dumps(config, indent=4, ensure_ascii=False)
-        )
+        logging.info(f"Loaded config:\n {config}")
         logging.info(f"Loading WanModel from {model_path} with type {model_type}")
         model = WanModel(model_path, config, device)
 
@@ -524,16 +714,15 @@ class Lightx2vWanVideoSampler:
             "required": {
                 "model": ("LIGHT_WAN_MODEL",),
                 "text_embeddings": ("LIGHT_TEXT_EMBEDDINGS",),
+                "image_embeddings": ("LIGHT_IMAGE_EMBEDDINGS",),
                 "steps": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
+                "shift": ("FLOAT", {"default": 5.0}),
                 "cfg_scale": (
                     "FLOAT",
-                    {"default": 7.5, "min": 0.0, "max": 20.0, "step": 0.1},
+                    {"default": 5, "min": 0.0, "max": 20.0, "step": 0.1},
                 ),
                 "seed": ("INT", {"default": 42}),
-            },
-            "optional": {
-                "image_embeddings": ("LIGHT_IMAGE_EMBEDDINGS",),
-            },
+            }
         }
 
     RETURN_TYPES = ("LIGHT_LATENT",)
@@ -546,44 +735,60 @@ class Lightx2vWanVideoSampler:
         model,
         text_embeddings,
         steps,
+        shift,
         cfg_scale,
         seed,
-        image_embeddings=None,
+        image_embeddings,
     ):
         # Update model config
 
-        config = cast(Any, model.get("config"))
-        model = cast(WanModel, model.get("wan_model"))
+        model_config = model.get("config")
+        image_config = image_embeddings.get("config")
+        model_config.update(image_config)
+        model_config = cast(Any, model_config)
 
-        seed_all(seed)
+        logging.info(f"Loaded config:\n {model_config}")
+
+        # wan model
+        wan_model = cast(WanModel, model.get("wan_model"))
+        # clip vision result
+        clip_encoder_out = image_embeddings.get("clip_encoder_out", None)
+        # text result
+        vae_encode_out = image_embeddings.get("vae_encode_out", None)
+
+        if model_config.task == "i2v" and (
+            clip_encoder_out is None or vae_encode_out is None
+        ):
+            raise ValueError("clip_encoder_out must be provided for i2v task")
+
+        model_config.infer_steps = steps
+        model_config.sample_shift = shift
+        model_config.sample_guide_scale = cfg_scale
+        model_config.seed = seed
+
+        # wan_runner.set_target_shape
+        if model_config.task == "i2v":
+            model_config.target_shape = (16, 21, model_config.lat_h, model_config.lat_w)
+        elif model_config.task == "t2v":
+            model_config.target_shape = (
+                16,
+                (model_config.target_video_length - 1) // 4 + 1,
+                int(model_config.target_height) // model_config.vae_stride[1],
+                int(model_config.target_width) // model_config.vae_stride[2],
+            )
 
         # wan_runner.init_scheduler
-        if config.feature_caching == "NoCaching":  # type:ignore
-            scheduler = WanScheduler(config)
-        elif config.feature_caching == "Tea":  # type:ignore
-            scheduler = WanSchedulerTeaCaching(config)
+        if model_config.feature_caching == "NoCaching":
+            scheduler = WanScheduler(model_config)
+        elif model_config.feature_caching == "Tea":
+            scheduler = WanSchedulerTeaCaching(model_config)
         else:
             raise NotImplementedError(
-                f"Unsupported feature_caching type: {config.feature_caching}"  # type:ignore
+                f"Unsupported feature_caching type: {model_config.feature_caching}"  # type:ignore
             )
 
         # setup scheduler
-        model.set_scheduler(scheduler)
-
-        # wan_runner.set_target_shape
-        if config.task == "i2v":
-            if image_embeddings is None:
-                raise ValueError("image_embeddings must be provided for i2v task")
-            config.lat_h = image_embeddings["lat_h"]
-            config.lat_w = image_embeddings["lat_w"]
-            config.target_shape = (16, 21, config.lat_h, config.lat_w)
-        elif config.task == "t2v":
-            config.target_shape = (
-                16,
-                (config.target_video_length - 1) // 4 + 1,
-                int(config.target_height) // config.vae_stride[1],
-                int(config.target_width) // config.vae_stride[2],
-            )
+        wan_model.set_scheduler(scheduler)
 
         # Set up inputs
         inputs = {
@@ -602,7 +807,7 @@ class Lightx2vWanVideoSampler:
             with ProfilingContext("scheduler.step_pre"):
                 scheduler.step_pre(step_index=step_index)
             with ProfilingContext("model.infer"):
-                model.infer(inputs)
+                wan_model.infer(inputs)
             with ProfilingContext("scheduler.step_post"):
                 scheduler.step_post()
 
@@ -610,7 +815,7 @@ class Lightx2vWanVideoSampler:
 
         scheduler.clear()
 
-        del inputs, model, text_embeddings, image_embeddings
+        del inputs, wan_model, text_embeddings, image_embeddings
         torch.cuda.empty_cache()
 
         return ({"samples": scheduler.latents, "generator": scheduler.generator},)
@@ -622,6 +827,8 @@ NODE_CLASS_MAPPINGS = {
     "Lightx2vWanVideoT5Encoder": Lightx2vWanVideoT5Encoder,
     "Lightx2vWanVideoClipVisionEncoderLoader": Lightx2vWanVideoClipVisionEncoderLoader,
     "Lightx2vWanVideoVaeLoader": Lightx2vWanVideoVaeLoader,
+    "Lightx2vTeaCache": WanVideoTeaCache,
+    "Lightx2vWanVideoEmptyEmbeds": Lightx2vWanVideoEmptyEmbeds,
     "Lightx2vWanVideoImageEncoder": Lightx2vWanVideoImageEncoder,
     "Lightx2vWanVideoVaeDecoder": Lightx2vWanVideoVaeDecoder,
     "Lightx2vWanVideoModelLoader": Lightx2vWanVideoModelLoader,
@@ -638,4 +845,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Lightx2vWanVideoVaeDecoder": "LightX2V WAN VAE Decoder",
     "Lightx2vWanVideoModelLoader": "LightX2V WAN Model Loader",
     "Lightx2vWanVideoSampler": "LightX2V WAN Video Sampler",
+    "Lightx2vTeaCache": "LightX2V WAN Tea Cache",
+    "Lightx2vWanVideoEmptyEmbeds": "LightX2V WAN Video Empty Embeds",
 }
