@@ -7,6 +7,7 @@ import json
 import numpy as np
 import comfy.model_management as mm
 from comfy.utils import ProgressBar
+from pathlib import Path
 
 # import folder_paths
 from tqdm import tqdm
@@ -27,6 +28,8 @@ from .lightx2v.lightx2v.models.schedulers.wan.feature_caching.scheduler import (
     WanSchedulerTeaCaching,
 )
 
+from .lightx2v.lightx2v.common.ops import *  # noqa: F401, F403 for import global register
+
 
 class WanVideoTeaCache:
     @classmethod
@@ -36,42 +39,48 @@ class WanVideoTeaCache:
                 "rel_l1_thresh": (
                     "FLOAT",
                     {
-                        "default": 0.3,
+                        "default": 0.275,
+                        "min": 0.0,
+                        "max": 10.0,
+                        "step": 0.001,
+                        "tooltip": "Threshold for to determine when to apply the cache, compromise between speed and accuracy. When using coefficients a good value range is something between 0.2-0.4 for all but 1.3B model, which should be about 10 times smaller, same as when not using coefficients.",
+                    },
+                ),
+                "start_percent": (
+                    "FLOAT",
+                    {
+                        "default": 0.1,
                         "min": 0.0,
                         "max": 1.0,
-                        "step": 0.001,
-                        "tooltip": "Higher values will make TeaCache more aggressive, faster, but may cause artifacts. Good value range for 1.3B: 0.05 - 0.08, for other models 0.15-0.30",
+                        "step": 0.01,
+                        "tooltip": "The start percentage of the steps to use with TeaCache.",
                     },
                 ),
-                "start_step": (
-                    "INT",
+                "end_percent": (
+                    "FLOAT",
                     {
-                        "default": 1,
-                        "min": 0,
-                        "max": 9999,
-                        "step": 1,
-                        "tooltip": "Start percentage of the steps to apply TeaCache",
-                    },
-                ),
-                "end_step": (
-                    "INT",
-                    {
-                        "default": -1,
-                        "min": -1,
-                        "max": 9999,
-                        "step": 1,
-                        "tooltip": "End steps to apply TeaCache",
+                        "default": 1.0,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.01,
+                        "tooltip": "The end percentage of the steps to use with TeaCache.",
                     },
                 ),
                 "cache_device": (
                     ["main_device", "offload_device"],
                     {"default": "offload_device", "tooltip": "Device to cache to"},
                 ),
-                "use_coefficients": (
-                    "BOOLEAN",
+                "coefficients": (
+                    [
+                        "i2v-14B-720p",
+                        "i2v-14B-480p",
+                        "1.3B",
+                        "14B",
+                        "disabled",
+                    ],
                     {
-                        "default": True,
-                        "tooltip": "Use calculated coefficients for more accuracy. When enabled therel_l1_thresh should be about 10 times higher than without",
+                        "default": "i2v-14B-720p",
+                        "tooltip": "Use coefficients for TeaCache. 'i2v-14B-720p' will use the default coefficients, 'disabled' will disable coefficients.",
                     },
                 ),
             },
@@ -99,7 +108,7 @@ class WanVideoTeaCache:
         start_step,
         end_step,
         cache_device,
-        use_coefficients,
+        coefficients,
         mode="e",
     ):
         if cache_device == "main_device":
@@ -111,7 +120,7 @@ class WanVideoTeaCache:
             "start_step": start_step,
             "end_step": end_step,
             "cache_device": teacache_device,
-            "use_coefficients": use_coefficients,
+            "coefficients": coefficients,
             "mode": mode,
         }
         return (teacache_args,)
@@ -125,13 +134,13 @@ class Lightx2vWanVideoT5EncoderLoader:
                 "t5_model_path": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/models_t5_umt5-xxl-enc-bf16.pth"
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/models_t5_umt5-xxl-enc-bf16.pth"
                     },
                 ),
                 "tokenizer_path": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/google/umt5-xxl"
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/google/umt5-xxl"
                     },
                 ),
                 "text_len": (
@@ -220,13 +229,9 @@ class Lightx2vWanVideoT5Encoder:
                 self.cpu_offload = cpu_offload
 
         # NOTE(xxx): adapt the config if cpu_offload is set, t5 model must be on cuda device
-        config = Config(cpu_offload=False)
-
         # Encode the text
-        context = t5_encoder.infer([prompt], config)
-        context_null = t5_encoder.infer(
-            [negative_prompt if negative_prompt else ""], config
-        )
+        context = t5_encoder.infer([prompt])
+        context_null = t5_encoder.infer([negative_prompt if negative_prompt else ""])
 
         # Create text embeddings dictionary
         text_embeddings = {"context": context, "context_null": context_null}
@@ -244,7 +249,7 @@ class Lightx2vWanVideoVaeLoader:
                 "vae_model_path": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/Wan2.1_VAE.pth"
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/Wan2.1_VAE.pth"
                     },
                 ),
                 "precision": (["bf16", "fp16", "fp32"], {"default": "fp16"}),
@@ -337,13 +342,13 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
                 "clip_model_path": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
                     },
                 ),
                 "tokenizer_path": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P/xlm-roberta-large"
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/xlm-roberta-large"
                     },
                 ),
                 "precision": (["fp16", "fp32"], {"default": "fp16"}),
@@ -428,9 +433,9 @@ class Lightx2vWanVideoImageEncoder:
 
     def encode_image(
         self,
-        vae,
+        vae: WanVAE,
         image,
-        clip_vision_encoder,
+        clip_vision_encoder: ClipVisionModel,
         height,
         width,
         num_frames,
@@ -486,23 +491,29 @@ class Lightx2vWanVideoImageEncoder:
         h = lat_h * config.vae_stride[1]
         w = lat_w * config.vae_stride[2]
 
-        # TODO(xxx)：81？
-        msk = torch.ones(1, 81, lat_h, lat_w, device=device)
+        msk = torch.ones(
+            1, config.target_video_length, lat_h, lat_w, device=torch.device("cuda")
+        )
         msk[:, 1:] = 0
         msk = torch.concat(
             [torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1
         )
         msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w)
         msk = msk.transpose(1, 2)[0]
-
-        resized_img = torch.nn.functional.interpolate(
-            img[None].cpu(), size=(h, w), mode="bicubic"
-        ).transpose(0, 1)
-        padding = torch.zeros(3, 80, h, w, device=device)
-        concat_img = torch.concat([resized_img.to(device), padding], dim=1)
-
-        vae_encode_out = vae.encode([concat_img], config)[0]
-
+        vae_encode_out = vae.encode(
+            [
+                torch.concat(
+                    [
+                        torch.nn.functional.interpolate(
+                            img[None].cpu(), size=(h, w), mode="bicubic"
+                        ).transpose(0, 1),
+                        torch.zeros(3, config.target_video_length - 1, h, w),
+                    ],
+                    dim=1,
+                ).cuda()
+            ],
+            config,
+        )[0]
         # TODO(xxx): hard code
         vae_encode_out = torch.concat([msk, vae_encode_out]).to(torch.bfloat16)
 
@@ -586,7 +597,7 @@ class Lightx2vWanVideoModelLoader:
                 "model_path": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/shared_data/cache/huggingface/hub/Wan2.1-I2V-14B-480P"
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
                     },
                 ),
                 "model_type": (["t2v", "i2v"], {"default": "i2v"}),
@@ -641,12 +652,16 @@ class Lightx2vWanVideoModelLoader:
         else:
             device = torch.device("cpu")
 
-        # 首先在模型路径中查找config.json
-        model_path_dir = os.path.dirname(model_path)
-        config_json_path = os.path.join(model_path_dir, "config.json")
+        model_path = Path(model_path)
+        if model_path.is_file():
+            model_path_dir = model_path.parent
+        else:
+            model_path_dir = model_path
+        # TODO(xxx）：每个模型config是固定的，可以配置，直接选取默认值
+        config_json_path = model_path_dir / "config.json"
 
         config_json = {}
-        if os.path.exists(config_json_path):
+        if config_json_path.exists():
             with open(config_json_path, "r") as f:
                 config_json = json.load(f)
         else:
@@ -719,7 +734,7 @@ class Lightx2vWanVideoSampler:
                 "shift": ("FLOAT", {"default": 5.0}),
                 "cfg_scale": (
                     "FLOAT",
-                    {"default": 5, "min": 0.0, "max": 20.0, "step": 0.1},
+                    {"default": 5, "min": 1, "max": 20.0, "step": 0.1},
                 ),
                 "seed": ("INT", {"default": 42}),
             }
@@ -766,9 +781,20 @@ class Lightx2vWanVideoSampler:
         model_config.sample_guide_scale = cfg_scale
         model_config.seed = seed
 
+        model_config.enable_cfg = True
+        model_config.offload_granularity = "block"
+
         # wan_runner.set_target_shape
+        num_channels_latents = model_config.get("num_channels_latents", 16)
+
         if model_config.task == "i2v":
-            model_config.target_shape = (16, 21, model_config.lat_h, model_config.lat_w)
+            model_config.target_shape = (
+                num_channels_latents,
+                (model_config.target_video_length - 1) // model_config.vae_stride[0]
+                + 1,
+                model_config.lat_h,
+                model_config.lat_w,
+            )
         elif model_config.task == "t2v":
             model_config.target_shape = (
                 16,
