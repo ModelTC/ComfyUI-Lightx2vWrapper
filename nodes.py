@@ -8,6 +8,7 @@ import numpy as np
 import comfy.model_management as comfy_mm
 from comfy.utils import ProgressBar
 from pathlib import Path
+import math
 
 # import folder_paths
 from tqdm import tqdm
@@ -726,10 +727,7 @@ class Lightx2vWanVideoModelLoader:
             raise FileNotFoundError(f"Config file not found at {config_json_path}")
 
         feature_caching = "Tea" if teacache_args is not None else "NoCaching"
-        if teacache_args:
-            teacache_thresh = teacache_args["rel_l1_thresh"]
-        else:
-            teacache_thresh = 0.26
+        teacache_thresh = teacache_args["rel_l1_thresh"] if teacache_args else 0.26
 
         # 创建配置字典
         config = {
@@ -838,7 +836,7 @@ class Lightx2vWanVideoSampler:
         model_config.sample_guide_scale = cfg_scale
         model_config.seed = seed
 
-        model_config.enable_cfg = True
+        model_config.enable_cfg = False if math.isclose(cfg_scale, 1.0) else True
         model_config.offload_granularity = "block"
 
         # wan_runner.set_target_shape
