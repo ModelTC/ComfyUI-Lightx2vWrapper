@@ -1,0 +1,997 @@
+{
+  "id": "8e881096-4f7b-4633-b34b-6b9c0f8aa093",
+  "revision": 0,
+  "last_node_id": 103,
+  "last_link_id": 70,
+  "nodes": [
+    {
+      "id": 86,
+      "type": "Lightx2vWanVideoT5Encoder",
+      "pos": [
+        1442.1888427734375,
+        -295.54803466796875
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "t5_encoder",
+          "type": "LIGHT_T5_ENCODER",
+          "link": 50
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text_embeddings",
+          "type": "LIGHT_TEXT_EMBEDDINGS",
+          "links": [
+            63
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoT5Encoder"
+      },
+      "widgets_values": [
+        "Summer beach vacation style, a white cat wearing sunglasses sits on a surfboard. The fluffy-furred feline gazes directly at the camera with a relaxed expression. Blurred beach scenery forms the background featuring crystal-clear waters, distant green hills, and a blue sky dotted with white clouds. The cat assumes a naturally relaxed posture, as if savoring the sea breeze and warm sunlight. A close-up shot highlights the feline's intricate details and the refreshing atmosphere of the seaside.",
+        "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+      ]
+    },
+    {
+      "id": 98,
+      "type": "SetNode",
+      "pos": [
+        1877.1121826171875,
+        -288.5297546386719
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "LIGHT_TEXT_EMBEDDINGS",
+          "type": "LIGHT_TEXT_EMBEDDINGS",
+          "link": 63
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "Set_textEmbedding",
+      "properties": {
+        "previousName": "textEmbedding"
+      },
+      "widgets_values": [
+        "textEmbedding"
+      ]
+    },
+    {
+      "id": 100,
+      "type": "SetNode",
+      "pos": [
+        2916.776611328125,
+        -288.08544921875
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "LIGHT_WAN_MODEL",
+          "type": "LIGHT_WAN_MODEL",
+          "link": 65
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "Set_WanModel",
+      "properties": {
+        "previousName": "WanModel"
+      },
+      "widgets_values": [
+        "WanModel"
+      ]
+    },
+    {
+      "id": 99,
+      "type": "GetNode",
+      "pos": [
+        2132.26806640625,
+        163.85653686523438
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIGHT_TEXT_EMBEDDINGS",
+          "type": "LIGHT_TEXT_EMBEDDINGS",
+          "links": [
+            64
+          ]
+        }
+      ],
+      "title": "Get_textEmbedding",
+      "properties": {},
+      "widgets_values": [
+        "textEmbedding"
+      ]
+    },
+    {
+      "id": 97,
+      "type": "GetNode",
+      "pos": [
+        2130.0673828125,
+        273.8567199707031
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIGHT_IMAGE_EMBEDDINGS",
+          "type": "LIGHT_IMAGE_EMBEDDINGS",
+          "links": [
+            62
+          ]
+        }
+      ],
+      "title": "Get_ImageEmbedding",
+      "properties": {},
+      "widgets_values": [
+        "ImageEmbedding"
+      ]
+    },
+    {
+      "id": 101,
+      "type": "GetNode",
+      "pos": [
+        2133.368896484375,
+        58.25640869140625
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIGHT_WAN_MODEL",
+          "type": "LIGHT_WAN_MODEL",
+          "links": [
+            66
+          ]
+        }
+      ],
+      "title": "Get_WanModel",
+      "properties": {},
+      "widgets_values": [
+        "WanModel"
+      ]
+    },
+    {
+      "id": 96,
+      "type": "SetNode",
+      "pos": [
+        1879.2105712890625,
+        221.4419403076172
+      ],
+      "size": [
+        217.705078125,
+        60
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "LIGHT_IMAGE_EMBEDDINGS",
+          "type": "LIGHT_IMAGE_EMBEDDINGS",
+          "link": 61
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "Set_ImageEmbedding",
+      "properties": {
+        "previousName": "ImageEmbedding"
+      },
+      "widgets_values": [
+        "ImageEmbedding"
+      ]
+    },
+    {
+      "id": 94,
+      "type": "SetNode",
+      "pos": [
+        1366.3128662109375,
+        -2.559765577316284
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "LIGHT_WAN_VAE",
+          "type": "LIGHT_WAN_VAE",
+          "link": 59
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "Set_VAE_MODEL",
+      "properties": {
+        "previousName": "VAE_MODEL"
+      },
+      "widgets_values": [
+        "VAE_MODEL"
+      ]
+    },
+    {
+      "id": 95,
+      "type": "GetNode",
+      "pos": [
+        2128.657958984375,
+        496.9094543457031
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LIGHT_WAN_VAE",
+          "type": "LIGHT_WAN_VAE",
+          "links": [
+            60
+          ]
+        }
+      ],
+      "title": "Get_VAE_MODEL",
+      "properties": {},
+      "widgets_values": [
+        "VAE_MODEL"
+      ]
+    },
+    {
+      "id": 82,
+      "type": "Lightx2vWanVideoVaeLoader",
+      "pos": [
+        946.6648559570312,
+        23.290925979614258
+      ],
+      "size": [
+        315,
+        154
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model_dir",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "model_dir"
+          },
+          "link": 68
+        }
+      ],
+      "outputs": [
+        {
+          "name": "wan_vae",
+          "type": "LIGHT_WAN_VAE",
+          "links": [
+            49,
+            59
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoVaeLoader"
+      },
+      "widgets_values": [
+        "Wan2.1_VAE.pth",
+        "fp16",
+        "cuda",
+        false,
+        ""
+      ]
+    },
+    {
+      "id": 83,
+      "type": "Lightx2vWanVideoClipVisionEncoderLoader",
+      "pos": [
+        870.7804565429688,
+        228.91616821289062
+      ],
+      "size": [
+        491.4000244140625,
+        154
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model_dir",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "model_dir"
+          },
+          "link": 70
+        }
+      ],
+      "outputs": [
+        {
+          "name": "clip_vision_encoder",
+          "type": "LIGHT_CLIP_VISION_ENCODER",
+          "links": [
+            47
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoClipVisionEncoderLoader"
+      },
+      "widgets_values": [
+        "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
+        "xlm-roberta-large",
+        "fp16",
+        "cuda",
+        ""
+      ]
+    },
+    {
+      "id": 88,
+      "type": "Lightx2vWanVideoModelLoader",
+      "pos": [
+        2540.527587890625,
+        -307.2720642089844
+      ],
+      "size": [
+        315,
+        274
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "teacache_args",
+          "shape": 7,
+          "type": "LIGHT_TEACACHEARGS",
+          "link": null
+        },
+        {
+          "name": "model_dir",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "model_dir"
+          },
+          "link": 69
+        }
+      ],
+      "outputs": [
+        {
+          "name": "wan_model",
+          "type": "LIGHT_WAN_MODEL",
+          "links": [
+            65
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoModelLoader"
+      },
+      "widgets_values": [
+        "",
+        "i2v",
+        "bf16",
+        "cuda",
+        "flash_attn3",
+        false,
+        "Default",
+        "",
+        1.0700000000000003,
+        "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
+      ]
+    },
+    {
+      "id": 87,
+      "type": "Lightx2vWanVideoT5EncoderLoader",
+      "pos": [
+        1044.3515625,
+        -289.7835998535156
+      ],
+      "size": [
+        378,
+        178
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model_dir",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "model_dir"
+          },
+          "link": 67
+        }
+      ],
+      "outputs": [
+        {
+          "name": "t5_encoder",
+          "type": "LIGHT_T5_ENCODER",
+          "links": [
+            50
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoT5EncoderLoader"
+      },
+      "widgets_values": [
+        "models_t5_umt5-xxl-enc-bf16.pth",
+        "bf16",
+        "cuda",
+        "bf16"
+      ]
+    },
+    {
+      "id": 91,
+      "type": "Lightx2vWanVideoVaeDecoder",
+      "pos": [
+        2617.407470703125,
+        521.6240844726562
+      ],
+      "size": [
+        302.4000244140625,
+        46
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "wan_vae",
+          "type": "LIGHT_WAN_VAE",
+          "link": 60
+        },
+        {
+          "name": "latent",
+          "type": "LIGHT_LATENT",
+          "link": 55
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            57
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoVaeDecoder"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 90,
+      "type": "Lightx2vWanVideoSampler",
+      "pos": [
+        2430.891845703125,
+        129.44773864746094
+      ],
+      "size": [
+        327.5999755859375,
+        194
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "LIGHT_WAN_MODEL",
+          "link": 66
+        },
+        {
+          "name": "text_embeddings",
+          "type": "LIGHT_TEXT_EMBEDDINGS",
+          "link": 64
+        },
+        {
+          "name": "image_embeddings",
+          "type": "LIGHT_IMAGE_EMBEDDINGS",
+          "link": 62
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LIGHT_LATENT",
+          "links": [
+            55
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoSampler"
+      },
+      "widgets_values": [
+        20,
+        8,
+        1,
+        42,
+        "fixed"
+      ]
+    },
+    {
+      "id": 85,
+      "type": "Lightx2vWanVideoImageEncoder",
+      "pos": [
+        1399.911865234375,
+        219.23788452148438
+      ],
+      "size": [
+        456,
+        146
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vae",
+          "type": "LIGHT_WAN_VAE",
+          "link": 49
+        },
+        {
+          "name": "clip_vision_encoder",
+          "type": "LIGHT_CLIP_VISION_ENCODER",
+          "link": 47
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 58
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image_embeddings",
+          "type": "LIGHT_IMAGE_EMBEDDINGS",
+          "links": [
+            61
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoImageEncoder"
+      },
+      "widgets_values": [
+        960,
+        544,
+        81
+      ]
+    },
+    {
+      "id": 92,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        2975.113525390625,
+        136.8319549560547
+      ],
+      "size": [
+        220.5830078125,
+        591.4440307617188
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 57
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 16,
+        "loop_count": 0,
+        "filename_prefix": "AnimateDiff",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "AnimateDiff_00019.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 16
+          },
+          "muted": false
+        }
+      }
+    },
+    {
+      "id": 102,
+      "type": "Lightx2vWanVideoModelDir",
+      "pos": [
+        348.7199401855469,
+        -279.3098449707031
+      ],
+      "size": [
+        351.8695373535156,
+        146.87998962402344
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            67,
+            68,
+            69,
+            70
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoModelDir"
+      },
+      "widgets_values": [
+        "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-720P-cfg"
+      ]
+    },
+    {
+      "id": 93,
+      "type": "LoadImage",
+      "pos": [
+        927.174072265625,
+        455.7635498046875
+      ],
+      "size": [
+        315,
+        314.0000305175781
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            58
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "img_0.jpg",
+        "image"
+      ]
+    }
+  ],
+  "links": [
+    [
+      47,
+      83,
+      0,
+      85,
+      1,
+      "LIGHT_CLIP_VISION_ENCODER"
+    ],
+    [
+      49,
+      82,
+      0,
+      85,
+      0,
+      "LIGHT_WAN_VAE"
+    ],
+    [
+      50,
+      87,
+      0,
+      86,
+      0,
+      "LIGHT_T5_ENCODER"
+    ],
+    [
+      55,
+      90,
+      0,
+      91,
+      1,
+      "LIGHT_LATENT"
+    ],
+    [
+      57,
+      91,
+      0,
+      92,
+      0,
+      "IMAGE"
+    ],
+    [
+      58,
+      93,
+      0,
+      85,
+      2,
+      "IMAGE"
+    ],
+    [
+      59,
+      82,
+      0,
+      94,
+      0,
+      "*"
+    ],
+    [
+      60,
+      95,
+      0,
+      91,
+      0,
+      "LIGHT_WAN_VAE"
+    ],
+    [
+      61,
+      85,
+      0,
+      96,
+      0,
+      "*"
+    ],
+    [
+      62,
+      97,
+      0,
+      90,
+      2,
+      "LIGHT_IMAGE_EMBEDDINGS"
+    ],
+    [
+      63,
+      86,
+      0,
+      98,
+      0,
+      "*"
+    ],
+    [
+      64,
+      99,
+      0,
+      90,
+      1,
+      "LIGHT_TEXT_EMBEDDINGS"
+    ],
+    [
+      65,
+      88,
+      0,
+      100,
+      0,
+      "*"
+    ],
+    [
+      66,
+      101,
+      0,
+      90,
+      0,
+      "LIGHT_WAN_MODEL"
+    ],
+    [
+      67,
+      102,
+      0,
+      87,
+      0,
+      "STRING"
+    ],
+    [
+      68,
+      102,
+      0,
+      82,
+      0,
+      "STRING"
+    ],
+    [
+      69,
+      102,
+      0,
+      88,
+      1,
+      "STRING"
+    ],
+    [
+      70,
+      102,
+      0,
+      83,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "LoadWanModel",
+      "bounding": [
+        2112.2255859375,
+        -365.0322570800781,
+        1024.5506591796875,
+        333.60003662109375
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "RunSampler",
+      "bounding": [
+        2120.067138671875,
+        -15.34372329711914,
+        648.4239501953125,
+        359.1999816894531
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "TextEmbedding",
+      "bounding": [
+        1014.9916381835938,
+        -369.14801025390625,
+        1082.1181640625,
+        283.6000061035156
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "ImageEmbedding",
+      "bounding": [
+        860.780517578125,
+        -76.15978240966797,
+        1238.430419921875,
+        855.9235229492188
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7513148009015778,
+      "offset": [
+        -41.12401565861029,
+        -19.674610850016407
+      ]
+    },
+    "frontendVersion": "1.19.9"
+  },
+  "version": 0.4
+}
