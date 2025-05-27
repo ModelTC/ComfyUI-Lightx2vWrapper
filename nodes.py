@@ -5,7 +5,7 @@ from typing import cast, Any
 import logging
 import json
 import numpy as np
-import comfy.model_management as mm
+import comfy.model_management as comfy_mm
 from comfy.utils import ProgressBar
 from pathlib import Path
 
@@ -39,7 +39,7 @@ class WanVideoTeaCache:
                 "rel_l1_thresh": (
                     "FLOAT",
                     {
-                        "default": 0.275,
+                        "default": 0.26,
                         "min": 0.0,
                         "max": 10.0,
                         "step": 0.001,
@@ -112,9 +112,9 @@ class WanVideoTeaCache:
         mode="e",
     ):
         if cache_device == "main_device":
-            teacache_device = mm.get_torch_device()
+            teacache_device = comfy_mm.get_torch_device()
         else:
-            teacache_device = mm.unet_offload_device()
+            teacache_device = comfy_mm.unet_offload_device()
         teacache_args = {
             "rel_l1_thresh": rel_l1_thresh,
             "start_step": start_step,
@@ -126,31 +126,45 @@ class WanVideoTeaCache:
         return (teacache_args,)
 
 
+class Lightx2vWanVideoModelDir:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model_dir": (
+                    "STRING",
+                    {
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
+                    },
+                )
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("STRING",)
+    FUNCTION = "process"
+    CATEGORY = "LightX2V"
+
+    def process(self, model_dir):
+        assert Path(model_dir).exists(), f"Model directory {model_dir} does not exist."
+        return (model_dir,)
+
+
 class Lightx2vWanVideoT5EncoderLoader:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "t5_model_path": (
+                "model_name": (
                     "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/models_t5_umt5-xxl-enc-bf16.pth"
-                    },
-                ),
-                "tokenizer_path": (
-                    "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/google/umt5-xxl"
-                    },
-                ),
-                "text_len": (
-                    "INT",
-                    {"default": 512, "min": 64, "max": 2048, "step": 1},
+                    {"default": "models_t5_umt5-xxl-enc-bf16.pth"},
                 ),
                 "precision": (["bf16", "fp16", "fp32"], {"default": "bf16"}),
                 "device": (["cuda", "cpu"], {"default": "cuda"}),
-                "additional_param": ("STRING", {"default": "default_value"}),
-            }
+            },
+            "optional": {
+                "model_dir": ("STRING", {"default": None}),
+            },
         }
 
     RETURN_TYPES = ("LIGHT_T5_ENCODER",)
@@ -160,12 +174,10 @@ class Lightx2vWanVideoT5EncoderLoader:
 
     def load_t5_encoder(
         self,
-        t5_model_path,
-        tokenizer_path,
-        text_len,
+        model_name,
         precision,
         device,
-        additional_param,
+        model_dir=None,
     ):
         # Map precision to torch dtype
         dtype_map = {
@@ -175,18 +187,34 @@ class Lightx2vWanVideoT5EncoderLoader:
         }
         dtype = dtype_map[precision]
 
+        if model_dir:
+            model_dir = Path(model_dir)
+            model_name = model_dir / model_name
+            tokenizer_path = model_dir / "google" / "umt5-xxl"
+        else:
+            model_name = Path(model_name)
+            assert model_name.exists(), (
+                f"T5 model path {model_name} does not exist. "
+                "Please provide a valid model path or set model_dir."
+            )
+            tokenizer_path = model_name.parent / "google" / "umt5-xxl"
+            assert tokenizer_path.exists(), (
+                f"Tokenizer path {tokenizer_path} does not exist. "
+                "Please provide a valid tokenizer path or set model_dir."
+            )
+
         # Resolve device
         if device == "cuda":
-            device = mm.get_torch_device()
+            device = comfy_mm.get_torch_device()
         else:
             device = torch.device("cpu")
 
         # Load the T5 encoder
         t5_encoder = T5EncoderModel(
-            text_len=text_len,
+            text_len=512,  # Default text length for T5
             dtype=dtype,
             device=device,  # type:ignore
-            checkpoint_path=t5_model_path,
+            checkpoint_path=model_name,
             tokenizer_path=tokenizer_path,
             shard_fn=None,
         )
@@ -223,13 +251,6 @@ class Lightx2vWanVideoT5Encoder:
     CATEGORY = "LightX2V"
 
     def encode_text(self, t5_encoder, prompt, negative_prompt):
-        # Create a config object with required attributes
-        class Config:
-            def __init__(self, cpu_offload=False):
-                self.cpu_offload = cpu_offload
-
-        # NOTE(xxx): adapt the config if cpu_offload is set, t5 model must be on cuda device
-        # Encode the text
         context = t5_encoder.infer([prompt])
         context_null = t5_encoder.infer([negative_prompt if negative_prompt else ""])
 
@@ -246,16 +267,17 @@ class Lightx2vWanVideoVaeLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "vae_model_path": (
+                "model_name": (
                     "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/Wan2.1_VAE.pth"
-                    },
+                    {"default": "Wan2.1_VAE.pth"},
                 ),
                 "precision": (["bf16", "fp16", "fp32"], {"default": "fp16"}),
                 "device": (["cuda", "cpu"], {"default": "cuda"}),
                 "parallel": ("BOOLEAN", {"default": False}),
-            }
+            },
+            "optional": {
+                "model_dir": ("STRING", {"default": None}),
+            },
         }
 
     RETURN_TYPES = ("LIGHT_WAN_VAE",)
@@ -263,7 +285,7 @@ class Lightx2vWanVideoVaeLoader:
     FUNCTION = "load_vae"
     CATEGORY = "LightX2V"
 
-    def load_vae(self, vae_model_path, precision, device, parallel):
+    def load_vae(self, model_name, precision, device, parallel, model_dir=None):
         # Map precision to torch dtype
         dtype_map = {
             "bf16": torch.bfloat16,
@@ -272,16 +294,26 @@ class Lightx2vWanVideoVaeLoader:
         }
         dtype = dtype_map[precision]
 
+        if model_dir:
+            model_dir = Path(model_dir)
+            model_name = model_dir / model_name
+
+        model_name = Path(model_name)
+        assert model_name.exists(), (
+            f"VAE model path {model_name} does not exist. "
+            "Please provide a valid model path or set model_dir."
+        )
+
         # Resolve device
         if device == "cuda":
-            device = mm.get_torch_device()
+            device = comfy_mm.get_torch_device()
         else:
             device = torch.device("cpu")
 
         # Load the VAE
         vae = WanVAE(
             z_dim=16,
-            vae_pth=vae_model_path,
+            vae_pth=str(model_name),
             dtype=dtype,
             device=device,  # type:ignore
             parallel=parallel,
@@ -339,21 +371,22 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "clip_model_path": (
+                "model_name": (
                     "STRING",
                     {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
+                        "default": "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
                     },
                 ),
                 "tokenizer_path": (
                     "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P/xlm-roberta-large"
-                    },
+                    {"default": "xlm-roberta-large"},
                 ),
                 "precision": (["fp16", "fp32"], {"default": "fp16"}),
                 "device": (["cuda", "cpu"], {"default": "cuda"}),
-            }
+            },
+            "optional": {
+                "model_dir": ("STRING", {"default": None}),
+            },
         }
 
     RETURN_TYPES = ("LIGHT_CLIP_VISION_ENCODER",)
@@ -362,15 +395,28 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
     CATEGORY = "LightX2V"
 
     def load_clip_vision_encoder(
-        self, clip_model_path, tokenizer_path, precision, device
+        self, model_name, tokenizer_path, precision, device, model_dir=None
     ):
         # Map precision to torch dtype
         dtype_map = {"fp16": torch.float16, "fp32": torch.float32}
         dtype = dtype_map[precision]
 
+        if model_dir:
+            model_dir = Path(model_dir)
+            model_name = model_dir / model_name
+            tokenizer_path = model_dir / tokenizer_path
+        assert model_name.exists(), (
+            f"CLIP model path {model_name} does not exist. "
+            "Please provide a valid model path or set model_dir."
+        )
+        assert tokenizer_path.exists(), (
+            f"Tokenizer path {tokenizer_path} does not exist. "
+            "Please provide a valid model path or set model_dir."
+        )
+
         # Resolve device
         if device == "cuda":
-            device = mm.get_torch_device()
+            device = comfy_mm.get_torch_device()
         else:
             device = torch.device("cpu")
 
@@ -378,7 +424,7 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
         clip_vision_encoder = ClipVisionModel(
             dtype=dtype,
             device=device,
-            checkpoint_path=clip_model_path,
+            checkpoint_path=model_name,
             tokenizer_path=tokenizer_path,
         )
 
@@ -456,7 +502,7 @@ class Lightx2vWanVideoImageEncoder:
         config = cast(Any, config)
 
         # 将图像转换为期望的张量格式
-        device = mm.get_torch_device()
+        device = comfy_mm.get_torch_device()
         img = image[0].permute(2, 0, 1).to(device)  # [C, H, W]
         img = img.sub_(0.5).div_(0.5)  # 归一化到 [-1, 1]
 
@@ -594,11 +640,9 @@ class Lightx2vWanVideoModelLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model_path": (
+                "model_name": (
                     "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
-                    },
+                    {"default": ""},
                 ),
                 "model_type": (["t2v", "i2v"], {"default": "i2v"}),
                 "precision": (["bf16", "fp16", "fp32"], {"default": "bf16"}),
@@ -617,6 +661,12 @@ class Lightx2vWanVideoModelLoader:
                     "FLOAT",
                     {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01},
                 ),
+                "model_dir": (
+                    "STRING",
+                    {
+                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
+                    },
+                ),
             },
         }
 
@@ -627,7 +677,7 @@ class Lightx2vWanVideoModelLoader:
 
     def load_model(
         self,
-        model_path,
+        model_name,
         model_type,
         precision,
         device,
@@ -637,6 +687,7 @@ class Lightx2vWanVideoModelLoader:
         lora_strength=1.0,
         cpu_offload=False,
         teacache_args=None,
+        model_dir=None,
     ):
         # 映射精度到torch dtype
         dtype_map = {
@@ -648,17 +699,23 @@ class Lightx2vWanVideoModelLoader:
 
         # 解析设备
         if device == "cuda":
-            device = mm.get_torch_device()
+            device = comfy_mm.get_torch_device()
         else:
             device = torch.device("cpu")
 
-        model_path = Path(model_path)
-        if model_path.is_file():
-            model_path_dir = model_path.parent
+        if model_dir:
+            model_name = Path(model_dir) / model_name
+
+        assert model_name, "Model path must be provided."
+        assert model_name.exists(), (
+            f"Model path {model_name} does not exist. "
+            "Please provide a valid model path or set model_dir."
+        )
+
+        if model_name.is_dir():
+            config_json_path = model_name / "config.json"
         else:
-            model_path_dir = model_path
-        # TODO(xxx）：每个模型config是固定的，可以配置，直接选取默认值
-        config_json_path = model_path_dir / "config.json"
+            config_json_path = model_name.parent / "config.json"
 
         config_json = {}
         if config_json_path.exists():
@@ -691,7 +748,7 @@ class Lightx2vWanVideoModelLoader:
                 "mm_type": mm_type,
                 "weight_auto_quant": False if mm_type == "Default" else True,
             },
-            "model_path": model_path,
+            "model_path": model_name,
             "task": model_type,
             "model_cls": "wan2.1",
             "device": device,
@@ -704,8 +761,8 @@ class Lightx2vWanVideoModelLoader:
         # NOTE(xxx): adapt to Lightx2v
         config = EasyDict(config)
         logging.info(f"Loaded config:\n {config}")
-        logging.info(f"Loading WanModel from {model_path} with type {model_type}")
-        model = WanModel(model_path, config, device)
+        logging.info(f"Loading WanModel from {model_name} with type {model_type}")
+        model = WanModel(model_name, config, device)
 
         # 如果指定了LoRA路径，应用LoRA
         if lora_path and os.path.exists(lora_path):
@@ -849,6 +906,7 @@ class Lightx2vWanVideoSampler:
 
 # Register the nodes
 NODE_CLASS_MAPPINGS = {
+    "Lightx2vWanVideoModelDir": Lightx2vWanVideoModelDir,
     "Lightx2vWanVideoT5EncoderLoader": Lightx2vWanVideoT5EncoderLoader,
     "Lightx2vWanVideoT5Encoder": Lightx2vWanVideoT5Encoder,
     "Lightx2vWanVideoClipVisionEncoderLoader": Lightx2vWanVideoClipVisionEncoderLoader,
@@ -862,6 +920,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "Lightx2vWanVideoModelDir": "LightX2V WAN Model Directory",
     "Lightx2vWanVideoT5EncoderLoader": "LightX2V WAN T5 Encoder Loader",
     "Lightx2vWanVideoT5Encoder": "LightX2V WAN T5 Encoder",
     "Lightx2vWanVideoClipVisionEncoderLoader": "LightX2V WAN CLIP Vision Encoder Loader",
