@@ -253,12 +253,12 @@ class Lightx2vWanVideoT5EncoderLoader:
         if model_dir:
             model_path = Path(model_dir)
             model_path = model_path / model_name
-            tokenizer_path = model_path / "google" / "umt5-xxl"
         else:
             model_path = Path(model_name)
             assert model_path.exists(), f"T5 model path {model_path} does not exist. Please provide a valid model path or set model_dir."
-            tokenizer_path = model_path.parent / "google" / "umt5-xxl"
-            assert tokenizer_path.exists(), f"Tokenizer path {tokenizer_path} does not exist. Please provide a valid tokenizer path or set model_dir."
+
+        tokenizer_path = model_path.parent / "google" / "umt5-xxl"
+        assert tokenizer_path.exists(), f"Tokenizer path {tokenizer_path} does not exist. Please provide a valid tokenizer path or set model_dir."
 
         if device == "cuda":
             init_device = comfy_mm.get_torch_device()
@@ -267,7 +267,7 @@ class Lightx2vWanVideoT5EncoderLoader:
             init_device = torch.device("cpu")
             cpu_offload = True
 
-        t5_encoder = LightX2VEncoderFactory.create_t5_encoder(model_name, tokenizer_path, dtype, init_device, cpu_offload)
+        t5_encoder = LightX2VEncoderFactory.create_t5_encoder(model_path, tokenizer_path, dtype, init_device, cpu_offload)
 
         return (t5_encoder,)
 
@@ -427,14 +427,9 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
         if model_dir:
             model_path = Path(model_dir)
             model_path = model_path / model_name
-            tokenizer_file_path = model_path / tokenizer_path
         else:
             model_path = Path(model_name)
             assert model_path.exists(), f"CLIP model path {model_path} does not exist. Please provide a valid model path or set model_dir."
-            tokenizer_file_path = model_path / tokenizer_path
-            assert tokenizer_file_path.exists(), (
-                f"Tokenizer path {tokenizer_file_path} does not exist. Please provide a valid model path or set model_dir."
-            )
 
         if device == "cuda":
             init_device = comfy_mm.get_torch_device()
@@ -649,9 +644,13 @@ class Lightx2vWanVideoModelLoader:
                     {"default": "flash_attn3"},
                 ),
                 "cpu_offload": ("BOOLEAN", {"default": False}),
+                "offload_granularity": (
+                    ["block", "phase"],
+                    {"default": "phase"},
+                ),
             },
             "optional": {
-                "mm_type": ("STRING", {"default": "None"}),
+                "mm_type": ("STRING", {"default": None}),
                 "teacache_args": ("LIGHT_TEACACHEARGS", {"default": None}),
                 "lora_path": ("STRING", {"default": None}),
                 "lora_strength": (
@@ -677,6 +676,7 @@ class Lightx2vWanVideoModelLoader:
         precision: str,
         device: str,
         attention_type: str,
+        offload_granularity: str,
         mm_type: str | None = None,
         lora_path: str | None = None,
         lora_strength: float = 1.0,
@@ -737,7 +737,7 @@ class Lightx2vWanVideoModelLoader:
             "attention_type": attention_type,
             "lora_path": lora_path if lora_path and lora_path.strip() else None,
             "strength_model": lora_strength,
-            "offload_granularity": "block",
+            "offload_granularity": offload_granularity,
         }
 
         config.update(**config_json)
@@ -809,6 +809,7 @@ class Lightx2vWanVideoSampler:
         model_config.seed = seed
 
         model_config.enable_cfg = False if math.isclose(cfg_scale, 1.0) else True
+        logging.info(f"Loaded update config:\n {model_config}")
 
         # wan_runner.set_target_shape
         num_channels_latents = model_config.get("num_channels_latents", 16)
