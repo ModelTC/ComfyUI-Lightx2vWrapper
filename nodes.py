@@ -77,11 +77,10 @@ class WanVideoTeaCache:
                         "i2v-14B-480p",
                         "t2v-1.3B",
                         "t2v-14B",
-                        "disabled",
                     ],
                     {
                         "default": "i2v-14B-720p",
-                        "tooltip": "Use coefficients for TeaCache. 'i2v-14B-720p' will use the default coefficients, 'disabled' will disable coefficients.",
+                        "tooltip": "Use coefficients for TeaCache. 'i2v-14B-720p' will use the default coefficients",
                     },
                 ),
                 "use_ret_steps": ("BOOLEAN", {"default": False}),
