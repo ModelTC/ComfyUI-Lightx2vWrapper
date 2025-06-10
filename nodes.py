@@ -75,8 +75,8 @@ class WanVideoTeaCache:
                     [
                         "i2v-14B-720p",
                         "i2v-14B-480p",
-                        "1.3B",
-                        "14B",
+                        "t2v-1.3B",
+                        "t2v-14B",
                         "disabled",
                     ],
                     {
@@ -84,6 +84,7 @@ class WanVideoTeaCache:
                         "tooltip": "Use coefficients for TeaCache. 'i2v-14B-720p' will use the default coefficients, 'disabled' will disable coefficients.",
                     },
                 ),
+                "use_ret_steps": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "mode": (
@@ -105,23 +106,47 @@ class WanVideoTeaCache:
 
     def process(
         self,
-        rel_l1_thresh,
-        start_step,
-        end_step,
-        cache_device,
-        coefficients,
+        rel_l1_thresh: float,
+        start_percent: float,
+        end_percent: float,
+        cache_device: str,
+        coefficients: str,
+        use_ret_steps: bool,
         mode="e",
     ):
         if cache_device == "main_device":
             teacache_device = comfy_mm.get_torch_device()
         else:
             teacache_device = comfy_mm.unet_offload_device()
+
+        # use_ret_steps = True is [0]
+        # use_ret_steps = False is [1]
+        coeff_values_map = {
+            "i2v-14B-480p": [
+                [2.57151496e05, -3.54229917e04, 1.40286849e03, -1.35890334e01, 1.32517977e-01],
+                [-3.02331670e02, 2.23948934e02, -5.25463970e01, 5.87348440e00, -2.01973289e-01],
+            ],
+            "i2v-14B-720p": [
+                [8.10705460e03, 2.13393892e03, -3.72934672e02, 1.66203073e01, -4.17769401e-02],
+                [-114.36346466, 65.26524496, -18.82220707, 4.91518089, -0.23412683],
+            ],
+            "t2v-1.3B": [
+                [-5.21862437e04, 9.23041404e03, -5.28275948e02, 1.36987616e01, -4.99875664e-02],
+                [2.39676752e03, -1.31110545e03, 2.01331979e02, -8.29855975e00, 1.37887774e-01],
+            ],
+            "t2v-14B": [
+                [-3.03318725e05, 4.90537029e04, -2.65530556e03, 5.87365115e01, -3.15583525e-01],
+                [-5784.54975374, 5449.50911966, -1811.16591783, 256.27178429, -13.02252404],
+            ],
+        }
+
         teacache_args = {
             "rel_l1_thresh": rel_l1_thresh,
-            "start_step": start_step,
-            "end_step": end_step,
+            "start_percent": start_percent,
+            "end_percent": end_percent,
             "cache_device": teacache_device,
-            "coefficients": coefficients,
+            "coefficients": coeff_values_map[coefficients],
+            "use_ret_steps": use_ret_steps,
             "mode": mode,
         }
         return (teacache_args,)
@@ -134,9 +159,7 @@ class Lightx2vWanVideoModelDir:
             "required": {
                 "model_dir": (
                     "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
-                    },
+                    {"default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"},
                 )
             }
         }
@@ -194,22 +217,17 @@ class Lightx2vWanVideoT5EncoderLoader:
             tokenizer_path = model_dir / "google" / "umt5-xxl"
         else:
             model_name = Path(model_name)
-            assert model_name.exists(), (
-                f"T5 model path {model_name} does not exist. "
-                "Please provide a valid model path or set model_dir."
-            )
+            assert model_name.exists(), f"T5 model path {model_name} does not exist. Please provide a valid model path or set model_dir."
             tokenizer_path = model_name.parent / "google" / "umt5-xxl"
-            assert tokenizer_path.exists(), (
-                f"Tokenizer path {tokenizer_path} does not exist. "
-                "Please provide a valid tokenizer path or set model_dir."
-            )
+            assert tokenizer_path.exists(), f"Tokenizer path {tokenizer_path} does not exist. Please provide a valid tokenizer path or set model_dir."
 
         # Resolve device
         if device == "cuda":
             device = comfy_mm.get_torch_device()
+            cpu_offload = False
         else:
             device = torch.device("cpu")
-
+            cpu_offload = True
         # Load the T5 encoder
         t5_encoder = T5EncoderModel(
             text_len=512,  # Default text length for T5
@@ -218,6 +236,7 @@ class Lightx2vWanVideoT5EncoderLoader:
             checkpoint_path=model_name,
             tokenizer_path=tokenizer_path,
             shard_fn=None,
+            cpu_offload=cpu_offload,
         )
 
         return (t5_encoder,)
@@ -300,27 +319,24 @@ class Lightx2vWanVideoVaeLoader:
             model_name = model_dir / model_name
 
         model_name = Path(model_name)
-        assert model_name.exists(), (
-            f"VAE model path {model_name} does not exist. "
-            "Please provide a valid model path or set model_dir."
-        )
+        assert model_name.exists(), f"VAE model path {model_name} does not exist. Please provide a valid model path or set model_dir."
 
         # Resolve device
         if device == "cuda":
-            device = comfy_mm.get_torch_device()
+            init_device = comfy_mm.get_torch_device()
         else:
-            device = torch.device("cpu")
+            init_device = torch.device("cpu")
 
         # Load the VAE
         vae = WanVAE(
             z_dim=16,
             vae_pth=str(model_name),
             dtype=dtype,
-            device=device,  # type:ignore
+            device=init_device,  # type:ignore
             parallel=parallel,
         )
-
-        return (vae,)
+        vae_result = {"vae_cls": vae, "device": device}
+        return (vae_result,)
 
 
 class Lightx2vWanVideoVaeDecoder:
@@ -339,7 +355,8 @@ class Lightx2vWanVideoVaeDecoder:
     CATEGORY = "LightX2V"
 
     def decode_latent(self, wan_vae, latent):
-        config = EasyDict({"cpu_offload": False})
+        wan_vae_instance = wan_vae["vae_cls"]
+        config = EasyDict({"cpu_offload": True if wan_vae["device"] == "cpu" else False})
 
         # 获取潜在表示和生成器
         latents = latent["samples"]
@@ -348,7 +365,8 @@ class Lightx2vWanVideoVaeDecoder:
         # 使用VAE解码潜在表示
         with torch.no_grad():
             # 解码得到视频帧
-            decoded_images = wan_vae.decode(latents, generator=generator, config=config)
+            with ProfilingContext("*decoded images*"):
+                decoded_images = wan_vae_instance.decode(latents, generator=generator, config=config)
 
             # 将像素值从 [-1, 1] 归一化到 [0, 1]
             images = (decoded_images + 1) / 2
@@ -374,9 +392,7 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
             "required": {
                 "model_name": (
                     "STRING",
-                    {
-                        "default": "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"
-                    },
+                    {"default": "models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"},
                 ),
                 "tokenizer_path": (
                     "STRING",
@@ -395,9 +411,7 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
     FUNCTION = "load_clip_vision_encoder"
     CATEGORY = "LightX2V"
 
-    def load_clip_vision_encoder(
-        self, model_name, tokenizer_path, precision, device, model_dir=None
-    ):
+    def load_clip_vision_encoder(self, model_name, tokenizer_path, precision, device, model_dir=None):
         # Map precision to torch dtype
         dtype_map = {"fp16": torch.float16, "fp32": torch.float32}
         dtype = dtype_map[precision]
@@ -406,14 +420,8 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
             model_dir = Path(model_dir)
             model_name = model_dir / model_name
             tokenizer_path = model_dir / tokenizer_path
-        assert model_name.exists(), (
-            f"CLIP model path {model_name} does not exist. "
-            "Please provide a valid model path or set model_dir."
-        )
-        assert tokenizer_path.exists(), (
-            f"Tokenizer path {tokenizer_path} does not exist. "
-            "Please provide a valid model path or set model_dir."
-        )
+        assert model_name.exists(), f"CLIP model path {model_name} does not exist. Please provide a valid model path or set model_dir."
+        assert tokenizer_path.exists(), f"Tokenizer path {tokenizer_path} does not exist. Please provide a valid model path or set model_dir."
 
         # Resolve device
         if device == "cuda":
@@ -426,7 +434,9 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
             dtype=dtype,
             device=device,
             checkpoint_path=model_name,
-            tokenizer_path=tokenizer_path,
+            clip_quantized=False,
+            clip_quantized_ckpt=None,
+            quant_scheme=None,
         )
 
         return (clip_vision_encoder,)
@@ -480,7 +490,7 @@ class Lightx2vWanVideoImageEncoder:
 
     def encode_image(
         self,
-        vae: WanVAE,
+        vae: dict[str, WanVAE | str],
         image,
         clip_vision_encoder: ClipVisionModel,
         height,
@@ -488,10 +498,10 @@ class Lightx2vWanVideoImageEncoder:
         num_frames,
     ):
         # 创建配置对象
-
+        vae_instance = vae["vae_cls"]
         config = EasyDict(
             {
-                "cpu_offload": False,
+                "cpu_offload": True if vae["device"] == "cpu" else False,
                 "target_height": height,
                 "target_width": width,
                 "target_video_length": num_frames,
@@ -508,28 +518,15 @@ class Lightx2vWanVideoImageEncoder:
         img = img.sub_(0.5).div_(0.5)  # 归一化到 [-1, 1]
 
         # 使用CLIP视觉编码器编码图像
-        clip_encoder_out = (
-            clip_vision_encoder.visual([img[:, None, :, :]], config)
-            .squeeze(0)
-            .to(torch.bfloat16)
-        )
+        with ProfilingContext("*clip encoder*"):
+            clip_encoder_out = clip_vision_encoder.visual([img[:, None, :, :]], config).squeeze(0).to(torch.bfloat16)
 
         # 计算宽高比和尺寸
         h, w = img.shape[1:]
         aspect_ratio = h / w
         max_area = config.target_height * config.target_width
-        lat_h = round(
-            np.sqrt(max_area * aspect_ratio)
-            // config.vae_stride[1]
-            // config.patch_size[1]
-            * config.patch_size[1]
-        )
-        lat_w = round(
-            np.sqrt(max_area / aspect_ratio)
-            // config.vae_stride[2]
-            // config.patch_size[2]
-            * config.patch_size[2]
-        )
+        lat_h = round(np.sqrt(max_area * aspect_ratio) // config.vae_stride[1] // config.patch_size[1] * config.patch_size[1])
+        lat_w = round(np.sqrt(max_area / aspect_ratio) // config.vae_stride[2] // config.patch_size[2] * config.patch_size[2])
 
         # XXX: trick
         config.lat_h = lat_h
@@ -538,29 +535,24 @@ class Lightx2vWanVideoImageEncoder:
         h = lat_h * config.vae_stride[1]
         w = lat_w * config.vae_stride[2]
 
-        msk = torch.ones(
-            1, config.target_video_length, lat_h, lat_w, device=torch.device("cuda")
-        )
+        msk = torch.ones(1, config.target_video_length, lat_h, lat_w, device=torch.device("cuda"))
         msk[:, 1:] = 0
-        msk = torch.concat(
-            [torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1
-        )
+        msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1)
         msk = msk.view(1, msk.shape[1] // 4, 4, lat_h, lat_w)
         msk = msk.transpose(1, 2)[0]
-        vae_encode_out = vae.encode(
-            [
-                torch.concat(
-                    [
-                        torch.nn.functional.interpolate(
-                            img[None].cpu(), size=(h, w), mode="bicubic"
-                        ).transpose(0, 1),
-                        torch.zeros(3, config.target_video_length - 1, h, w),
-                    ],
-                    dim=1,
-                ).cuda()
-            ],
-            config,
-        )[0]
+        with ProfilingContext("*vae encoder*"):
+            vae_encode_out: torch.Tensor = vae_instance.encode(
+                [
+                    torch.concat(
+                        [
+                            torch.nn.functional.interpolate(img[None].cpu(), size=(h, w), mode="bicubic").transpose(0, 1),
+                            torch.zeros(3, config.target_video_length - 1, h, w),
+                        ],
+                        dim=1,
+                    ).cuda()
+                ],  # type: ignore
+                config,
+            )[0]
         # TODO(xxx): hard code
         vae_encode_out = torch.concat([msk, vae_encode_out]).to(torch.bfloat16)
 
@@ -664,9 +656,7 @@ class Lightx2vWanVideoModelLoader:
                 ),
                 "model_dir": (
                     "STRING",
-                    {
-                        "default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
-                    },
+                    {"default": "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"},
                 ),
             },
         }
@@ -708,10 +698,7 @@ class Lightx2vWanVideoModelLoader:
             model_name = Path(model_dir) / model_name
 
         assert model_name, "Model path must be provided."
-        assert model_name.exists(), (
-            f"Model path {model_name} does not exist. "
-            "Please provide a valid model path or set model_dir."
-        )
+        assert model_name.exists(), f"Model path {model_name} does not exist. Please provide a valid model path or set model_dir."
 
         if model_name.is_dir():
             config_json_path = model_name / "config.json"
@@ -728,6 +715,7 @@ class Lightx2vWanVideoModelLoader:
 
         feature_caching = "Tea" if teacache_args is not None else "NoCaching"
         teacache_thresh = teacache_args["rel_l1_thresh"] if teacache_args else 0.26
+        use_ret_steps = teacache_args["use_ret_steps"] if teacache_args else False
 
         # 创建配置字典
         config = {
@@ -740,12 +728,9 @@ class Lightx2vWanVideoModelLoader:
             "patch_size": (1, 2, 2),
             "feature_caching": feature_caching,  # ["NoCaching", "TaylorSeer", "Tea"]
             "teacache_thresh": teacache_thresh,
-            "use_ret_steps": False,
+            "use_ret_steps": use_ret_steps,
             "use_bfloat16": dtype == torch.bfloat16,
-            "mm_config": {
-                "mm_type": mm_type,
-                "weight_auto_quant": False if mm_type == "Default" else True,
-            },
+            "mm_config": {},
             "model_path": model_name,
             "task": model_type,
             "model_cls": "wan2.1",
@@ -753,6 +738,7 @@ class Lightx2vWanVideoModelLoader:
             "attention_type": attention_type,
             "lora_path": lora_path if lora_path and lora_path.strip() else None,
             "strength_model": lora_strength,
+            "offload_granularity": "block",
         }
         # merge model dir config.json and config dict
         config.update(**config_json)
@@ -764,9 +750,7 @@ class Lightx2vWanVideoModelLoader:
 
         # 如果指定了LoRA路径，应用LoRA
         if lora_path and os.path.exists(lora_path):
-            logging.info(
-                f"Applying LoRA from {lora_path} with strength {lora_strength}"
-            )
+            logging.info(f"Applying LoRA from {lora_path} with strength {lora_strength}")
             lora_wrapper = WanLoraWrapper(model)
             lora_name = lora_wrapper.load_lora(lora_path)
             lora_wrapper.apply_lora(lora_name, lora_strength)
@@ -791,7 +775,7 @@ class Lightx2vWanVideoSampler:
                     "FLOAT",
                     {"default": 5, "min": 1, "max": 20.0, "step": 0.1},
                 ),
-                "seed": ("INT", {"default": 42}),
+                "seed": ("INT", {"default": 42, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "step": 1}),
             }
         }
 
@@ -826,9 +810,7 @@ class Lightx2vWanVideoSampler:
         # text result
         vae_encode_out = image_embeddings.get("vae_encode_out", None)
 
-        if model_config.task == "i2v" and (
-            clip_encoder_out is None or vae_encode_out is None
-        ):
+        if model_config.task == "i2v" and (clip_encoder_out is None or vae_encode_out is None):
             raise ValueError("clip_encoder_out must be provided for i2v task")
 
         model_config.infer_steps = steps
@@ -837,7 +819,6 @@ class Lightx2vWanVideoSampler:
         model_config.seed = seed
 
         model_config.enable_cfg = False if math.isclose(cfg_scale, 1.0) else True
-        model_config.offload_granularity = "block"
 
         # wan_runner.set_target_shape
         num_channels_latents = model_config.get("num_channels_latents", 16)
@@ -845,8 +826,7 @@ class Lightx2vWanVideoSampler:
         if model_config.task == "i2v":
             model_config.target_shape = (
                 num_channels_latents,
-                (model_config.target_video_length - 1) // model_config.vae_stride[0]
-                + 1,
+                (model_config.target_video_length - 1) // model_config.vae_stride[0] + 1,
                 model_config.lat_h,
                 model_config.lat_w,
             )
@@ -882,24 +862,20 @@ class Lightx2vWanVideoSampler:
 
         # Run sampling
         progress = ProgressBar(steps)
-        for step_index in tqdm(
-            range(scheduler.infer_steps), desc="inference", unit="step"
-        ):
-            with ProfilingContext("scheduler.step_pre"):
-                scheduler.step_pre(step_index=step_index)
+        for step_index in tqdm(range(scheduler.infer_steps), desc="inference", unit="step"):
+            scheduler.step_pre(step_index=step_index)
             with ProfilingContext("model.infer"):
                 wan_model.infer(inputs)
-            with ProfilingContext("scheduler.step_post"):
-                scheduler.step_post()
+            scheduler.step_post()
 
             progress.update(1)
 
+        latents, generator = scheduler.latents, scheduler.generator
         scheduler.clear()
-
-        del inputs, wan_model, text_embeddings, image_embeddings
+        del inputs, scheduler, text_embeddings, image_embeddings
         torch.cuda.empty_cache()
 
-        return ({"samples": scheduler.latents, "generator": scheduler.generator},)
+        return ({"samples": latents, "generator": generator},)
 
 
 # Register the nodes
