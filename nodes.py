@@ -715,6 +715,14 @@ class Lightx2vWanVideoModelLoader:
         use_ret_steps = teacache_args["use_ret_steps"] if teacache_args else False
         coefficients = teacache_args["coefficients"] if teacache_args else []
 
+        mm_config = {}
+        try:
+            if mm_type:
+                mm_config = json.loads(mm_type)
+        except Exception as e:
+            logging.error(f"Invalid mm_type config {mm_type}, error:{e}")
+            mm_config = {}
+
         # 创建配置字典
         config = {
             "do_mm_calib": False,
@@ -729,7 +737,7 @@ class Lightx2vWanVideoModelLoader:
             "use_ret_steps": use_ret_steps,
             "coefficients": coefficients,
             "use_bfloat16": dtype == torch.bfloat16,
-            "mm_config": {} if mm_type is None else {"mm_type": json.loads(mm_type)},
+            "mm_config": mm_config,
             "model_path": str(model_path),
             "task": model_type,
             "model_cls": "wan2.1",
