@@ -715,6 +715,7 @@ class Lightx2vWanVideoModelLoader:
         feature_caching = "Tea" if teacache_args is not None else "NoCaching"
         teacache_thresh = teacache_args["rel_l1_thresh"] if teacache_args else 0.26
         use_ret_steps = teacache_args["use_ret_steps"] if teacache_args else False
+        coefficients = teacache_args["coefficients"] if teacache_args else []
 
         # 创建配置字典
         config = {
@@ -728,6 +729,7 @@ class Lightx2vWanVideoModelLoader:
             "feature_caching": feature_caching,  # ["NoCaching", "TaylorSeer", "Tea"]
             "teacache_thresh": teacache_thresh,
             "use_ret_steps": use_ret_steps,
+            "coefficients": coefficients,
             "use_bfloat16": dtype == torch.bfloat16,
             "mm_config": {},
             "model_path": model_name,
