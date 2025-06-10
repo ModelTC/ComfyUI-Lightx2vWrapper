@@ -1,7 +1,7 @@
 import os
 import torch
 import gc
-from typing import cast, Any
+from typing import cast, Any, no_type_check
 import logging
 import json
 import numpy as np
@@ -30,6 +30,52 @@ from .lightx2v.lightx2v.models.schedulers.wan.feature_caching.scheduler import (
 )
 
 from .lightx2v.lightx2v.common.ops import *  # noqa: F401, F403 for import global register
+
+
+class LightX2VEncoderFactory:
+    """编码器工厂类，统一管理所有编码器的创建"""
+
+    @staticmethod
+    def create_t5_encoder(model_path, tokenizer_path, dtype, device, cpu_offload=False):
+        return T5EncoderModel(
+            text_len=512,
+            dtype=dtype,
+            device=device,
+            checkpoint_path=model_path,
+            tokenizer_path=tokenizer_path,
+            shard_fn=None,
+            cpu_offload=cpu_offload,
+        )
+
+    @staticmethod
+    def create_clip_vision_encoder(model_path, dtype, device):
+        return ClipVisionModel(
+            dtype=dtype,
+            device=device,
+            checkpoint_path=model_path,
+            clip_quantized=False,
+            clip_quantized_ckpt=None,
+            quant_scheme=None,
+        )
+
+    @staticmethod
+    def create_vae(model_path, dtype, device, parallel=False):
+        return WanVAE(
+            z_dim=16,
+            vae_pth=str(model_path),
+            dtype=dtype,
+            device=device,
+            parallel=parallel,
+        )
+
+
+def convert_dtype(dtype_str: str):
+    dtype_map = {
+        "bf16": torch.bfloat16,
+        "fp16": torch.float16,
+        "fp32": torch.float32,
+    }
+    return dtype_map[dtype_str]
 
 
 class WanVideoTeaCache:
@@ -197,46 +243,31 @@ class Lightx2vWanVideoT5EncoderLoader:
 
     def load_t5_encoder(
         self,
-        model_name,
-        precision,
-        device,
-        model_dir=None,
+        model_name: str,
+        precision: str,
+        device: str,
+        model_dir: str | None = None,
     ):
-        # Map precision to torch dtype
-        dtype_map = {
-            "bf16": torch.bfloat16,
-            "fp16": torch.float16,
-            "fp32": torch.float32,
-        }
-        dtype = dtype_map[precision]
+        dtype = convert_dtype(precision)
 
         if model_dir:
-            model_dir = Path(model_dir)
-            model_name = model_dir / model_name
-            tokenizer_path = model_dir / "google" / "umt5-xxl"
+            model_path = Path(model_dir)
+            model_path = model_path / model_name
+            tokenizer_path = model_path / "google" / "umt5-xxl"
         else:
-            model_name = Path(model_name)
-            assert model_name.exists(), f"T5 model path {model_name} does not exist. Please provide a valid model path or set model_dir."
-            tokenizer_path = model_name.parent / "google" / "umt5-xxl"
+            model_path = Path(model_name)
+            assert model_path.exists(), f"T5 model path {model_path} does not exist. Please provide a valid model path or set model_dir."
+            tokenizer_path = model_path.parent / "google" / "umt5-xxl"
             assert tokenizer_path.exists(), f"Tokenizer path {tokenizer_path} does not exist. Please provide a valid tokenizer path or set model_dir."
 
-        # Resolve device
         if device == "cuda":
-            device = comfy_mm.get_torch_device()
+            init_device = comfy_mm.get_torch_device()
             cpu_offload = False
         else:
-            device = torch.device("cpu")
+            init_device = torch.device("cpu")
             cpu_offload = True
-        # Load the T5 encoder
-        t5_encoder = T5EncoderModel(
-            text_len=512,  # Default text length for T5
-            dtype=dtype,
-            device=device,  # type:ignore
-            checkpoint_path=model_name,
-            tokenizer_path=tokenizer_path,
-            shard_fn=None,
-            cpu_offload=cpu_offload,
-        )
+
+        t5_encoder = LightX2VEncoderFactory.create_t5_encoder(model_name, tokenizer_path, dtype, init_device, cpu_offload)
 
         return (t5_encoder,)
 
@@ -269,15 +300,10 @@ class Lightx2vWanVideoT5Encoder:
     FUNCTION = "encode_text"
     CATEGORY = "LightX2V"
 
-    def encode_text(self, t5_encoder, prompt, negative_prompt):
+    def encode_text(self, t5_encoder: T5EncoderModel, prompt: str, negative_prompt: str | None = None):
         context = t5_encoder.infer([prompt])
         context_null = t5_encoder.infer([negative_prompt if negative_prompt else ""])
-
-        # Create text embeddings dictionary
         text_embeddings = {"context": context, "context_null": context_null}
-
-        print(f"Text Encoder Output Shape: {context[0].shape}")
-
         return (text_embeddings,)
 
 
@@ -304,36 +330,24 @@ class Lightx2vWanVideoVaeLoader:
     FUNCTION = "load_vae"
     CATEGORY = "LightX2V"
 
-    def load_vae(self, model_name, precision, device, parallel, model_dir=None):
-        # Map precision to torch dtype
-        dtype_map = {
-            "bf16": torch.bfloat16,
-            "fp16": torch.float16,
-            "fp32": torch.float32,
-        }
-        dtype = dtype_map[precision]
+    def load_vae(self, model_name: str, precision: str, device: str, parallel: bool, model_dir: str | None = None):
+        dtype = convert_dtype(precision)
 
         if model_dir:
-            model_dir = Path(model_dir)
-            model_name = model_dir / model_name
+            model_path = Path(model_dir)
+            model_path = model_path / model_name
+        else:
+            model_path = Path(model_name)
 
-        model_name = Path(model_name)
-        assert model_name.exists(), f"VAE model path {model_name} does not exist. Please provide a valid model path or set model_dir."
+        assert model_path.exists(), f"VAE model path {model_path} does not exist. Please provide a valid model path or set model_dir."
 
-        # Resolve device
         if device == "cuda":
             init_device = comfy_mm.get_torch_device()
         else:
             init_device = torch.device("cpu")
 
-        # Load the VAE
-        vae = WanVAE(
-            z_dim=16,
-            vae_pth=str(model_name),
-            dtype=dtype,
-            device=init_device,  # type:ignore
-            parallel=parallel,
-        )
+        vae = LightX2VEncoderFactory.create_vae(model_path, dtype, init_device, parallel)
+
         vae_result = {"vae_cls": vae, "device": device}
         return (vae_result,)
 
@@ -353,17 +367,14 @@ class Lightx2vWanVideoVaeDecoder:
     FUNCTION = "decode_latent"
     CATEGORY = "LightX2V"
 
-    def decode_latent(self, wan_vae, latent):
-        wan_vae_instance = wan_vae["vae_cls"]
-        config = EasyDict({"cpu_offload": True if wan_vae["device"] == "cpu" else False})
+    def decode_latent(self, wan_vae: dict[str, WanVAE | str], latent: dict[str, Any]):
+        wan_vae_instance: WanVAE = cast(WanVAE, wan_vae["vae_cls"])
+        config = EasyDict({"cpu_offload": wan_vae["device"] == "cpu"})
 
-        # 获取潜在表示和生成器
         latents = latent["samples"]
         generator = latent["generator"]
 
-        # 使用VAE解码潜在表示
         with torch.no_grad():
-            # 解码得到视频帧
             with ProfilingContext("*decoded images*"):
                 decoded_images = wan_vae_instance.decode(latents, generator=generator, config=config)
 
@@ -410,33 +421,27 @@ class Lightx2vWanVideoClipVisionEncoderLoader:
     FUNCTION = "load_clip_vision_encoder"
     CATEGORY = "LightX2V"
 
-    def load_clip_vision_encoder(self, model_name, tokenizer_path, precision, device, model_dir=None):
-        # Map precision to torch dtype
-        dtype_map = {"fp16": torch.float16, "fp32": torch.float32}
-        dtype = dtype_map[precision]
+    def load_clip_vision_encoder(self, model_name: str, tokenizer_path: str, precision: str, device: str, model_dir: str | None = None):
+        dtype = convert_dtype(precision)
 
         if model_dir:
-            model_dir = Path(model_dir)
-            model_name = model_dir / model_name
-            tokenizer_path = model_dir / tokenizer_path
-        assert model_name.exists(), f"CLIP model path {model_name} does not exist. Please provide a valid model path or set model_dir."
-        assert tokenizer_path.exists(), f"Tokenizer path {tokenizer_path} does not exist. Please provide a valid model path or set model_dir."
-
-        # Resolve device
-        if device == "cuda":
-            device = comfy_mm.get_torch_device()
+            model_path = Path(model_dir)
+            model_path = model_path / model_name
+            tokenizer_file_path = model_path / tokenizer_path
         else:
-            device = torch.device("cpu")
+            model_path = Path(model_name)
+            assert model_path.exists(), f"CLIP model path {model_path} does not exist. Please provide a valid model path or set model_dir."
+            tokenizer_file_path = model_path / tokenizer_path
+            assert tokenizer_file_path.exists(), (
+                f"Tokenizer path {tokenizer_file_path} does not exist. Please provide a valid model path or set model_dir."
+            )
 
-        # Load the CLIP vision encoder
-        clip_vision_encoder = ClipVisionModel(
-            dtype=dtype,
-            device=device,
-            checkpoint_path=model_name,
-            clip_quantized=False,
-            clip_quantized_ckpt=None,
-            quant_scheme=None,
-        )
+        if device == "cuda":
+            init_device = comfy_mm.get_torch_device()
+        else:
+            init_device = torch.device("cpu")
+
+        clip_vision_encoder = LightX2VEncoderFactory.create_clip_vision_encoder(model_path, dtype, init_device)
 
         return (clip_vision_encoder,)
 
@@ -490,14 +495,14 @@ class Lightx2vWanVideoImageEncoder:
     def encode_image(
         self,
         vae: dict[str, WanVAE | str],
-        image,
         clip_vision_encoder: ClipVisionModel,
-        height,
-        width,
-        num_frames,
+        image: torch.Tensor,
+        width: int,
+        height: int,
+        num_frames: int,
     ):
-        # 创建配置对象
-        vae_instance = vae["vae_cls"]
+        vae_instance: WanVAE = cast(WanVAE, vae["vae_cls"])
+
         config = EasyDict(
             {
                 "cpu_offload": True if vae["device"] == "cpu" else False,
@@ -552,7 +557,7 @@ class Lightx2vWanVideoImageEncoder:
                 ],  # type: ignore
                 config,
             )[0]
-        # TODO(xxx): hard code
+
         vae_encode_out = torch.concat([msk, vae_encode_out]).to(torch.bfloat16)
 
         image_embeddings = {
@@ -613,7 +618,7 @@ class Lightx2vWanVideoEmptyEmbeds:
     FUNCTION = "process"
     CATEGORY = "LightX2V"
 
-    def process(self, num_frames, width, height, control_embeds=None):
+    def process(self, num_frames: int, width: int, height: int):
         config = EasyDict(
             {
                 "target_height": height,
@@ -644,9 +649,9 @@ class Lightx2vWanVideoModelLoader:
                     {"default": "flash_attn3"},
                 ),
                 "cpu_offload": ("BOOLEAN", {"default": False}),
-                "mm_type": ("STRING", {"default": "Default"}),
             },
             "optional": {
+                "mm_type": ("STRING", {"default": "None"}),
                 "teacache_args": ("LIGHT_TEACACHEARGS", {"default": None}),
                 "lora_path": ("STRING", {"default": None}),
                 "lora_strength": (
@@ -667,42 +672,35 @@ class Lightx2vWanVideoModelLoader:
 
     def load_model(
         self,
-        model_name,
-        model_type,
-        precision,
-        device,
-        attention_type,
-        mm_type,
-        lora_path=None,
-        lora_strength=1.0,
-        cpu_offload=False,
-        teacache_args=None,
-        model_dir=None,
+        model_name: str,
+        model_type: str,
+        precision: str,
+        device: str,
+        attention_type: str,
+        mm_type: str | None = None,
+        lora_path: str | None = None,
+        lora_strength: float = 1.0,
+        cpu_offload: bool = False,
+        teacache_args: dict[str, Any] | None = None,
+        model_dir: str | None = None,
     ):
-        # 映射精度到torch dtype
-        dtype_map = {
-            "bf16": torch.bfloat16,
-            "fp16": torch.float16,
-            "fp32": torch.float32,
-        }
-        dtype = dtype_map[precision]
+        dtype = convert_dtype(precision)
 
-        # 解析设备
         if device == "cuda":
-            device = comfy_mm.get_torch_device()
+            init_device = comfy_mm.get_torch_device()
         else:
-            device = torch.device("cpu")
+            init_device = torch.device("cpu")
 
         if model_dir:
-            model_name = Path(model_dir) / model_name
-
-        assert model_name, "Model path must be provided."
-        assert model_name.exists(), f"Model path {model_name} does not exist. Please provide a valid model path or set model_dir."
-
-        if model_name.is_dir():
-            config_json_path = model_name / "config.json"
+            model_path = Path(model_dir) / model_name
         else:
-            config_json_path = model_name.parent / "config.json"
+            model_path = Path(model_name)
+            assert model_path.exists(), f"Model path {model_path} does not exist. Please provide a valid model path or set model_dir."
+
+        if model_path.is_dir():
+            config_json_path = model_path / "config.json"
+        else:
+            config_json_path = model_path.parent / "config.json"
 
         config_json = {}
         if config_json_path.exists():
@@ -731,23 +729,22 @@ class Lightx2vWanVideoModelLoader:
             "use_ret_steps": use_ret_steps,
             "coefficients": coefficients,
             "use_bfloat16": dtype == torch.bfloat16,
-            "mm_config": {},
-            "model_path": model_name,
+            "mm_config": {} if mm_type is None else {"mm_type": json.loads(mm_type)},
+            "model_path": str(model_path),
             "task": model_type,
             "model_cls": "wan2.1",
-            "device": device,
+            "device": init_device,
             "attention_type": attention_type,
             "lora_path": lora_path if lora_path and lora_path.strip() else None,
             "strength_model": lora_strength,
             "offload_granularity": "block",
         }
-        # merge model dir config.json and config dict
+
         config.update(**config_json)
-        # NOTE(xxx): adapt to Lightx2v
-        config = EasyDict(config)
+        config = EasyDict(config)  # NOTE(xxx): adapt to Lightx2v
         logging.info(f"Loaded config:\n {config}")
-        logging.info(f"Loading WanModel from {model_name} with type {model_type}")
-        model = WanModel(model_name, config, device)
+        logging.info(f"Loading WanModel from {model_path} with type {model_type}")
+        model = WanModel(model_path, config, init_device)
 
         # 如果指定了LoRA路径，应用LoRA
         if lora_path and os.path.exists(lora_path):
@@ -785,33 +782,25 @@ class Lightx2vWanVideoSampler:
     FUNCTION = "sample"
     CATEGORY = "LightX2V"
 
+    @no_type_check
     def sample(
         self,
-        model,
-        text_embeddings,
-        steps,
-        shift,
-        cfg_scale,
-        seed,
-        image_embeddings,
+        model: dict[str, WanModel | dict[str, Any]],
+        text_embeddings: dict[str, Any],
+        steps: int,
+        shift: float,
+        cfg_scale: float,
+        seed: int,
+        image_embeddings: dict[str, Any],
     ):
-        # Update model config
+        model_config = cast(EasyDict, model.get("config"))
+        model_config.update(image_embeddings.get("config", {}))
 
-        model_config = model.get("config")
-        image_config = image_embeddings.get("config")
-        model_config.update(image_config)
-        model_config = cast(Any, model_config)
-
-        logging.info(f"Loaded config:\n {model_config}")
-
-        # wan model
         wan_model = cast(WanModel, model.get("wan_model"))
-        # clip vision result
         clip_encoder_out = image_embeddings.get("clip_encoder_out", None)
-        # text result
         vae_encode_out = image_embeddings.get("vae_encode_out", None)
 
-        if model_config.task == "i2v" and (clip_encoder_out is None or vae_encode_out is None):
+        if model_config.task == "i2v" and (clip_encoder_out is None or vae_encode_out is None):  # type: ignore
             raise ValueError("clip_encoder_out must be provided for i2v task")
 
         model_config.infer_steps = steps
@@ -831,7 +820,7 @@ class Lightx2vWanVideoSampler:
                 model_config.lat_h,
                 model_config.lat_w,
             )
-        elif model_config.task == "t2v":
+        elif model_config.task == "t2v":  # type: ignore
             model_config.target_shape = (
                 16,
                 (model_config.target_video_length - 1) // 4 + 1,
