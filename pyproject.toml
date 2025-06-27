@@ -9,6 +9,6 @@ Repository = "https://github.com/GACLove/ComfyUI-Lightx2vWrapper"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "gaclove"
 DisplayName = "ComfyUI-Lightx2vWrapper"
 Icon = ""
