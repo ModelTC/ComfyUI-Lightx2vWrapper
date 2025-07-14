@@ -1,8 +1,8 @@
 {
   "id": "8e881096-4f7b-4633-b34b-6b9c0f8aa093",
   "revision": 0,
-  "last_node_id": 103,
-  "last_link_id": 70,
+  "last_node_id": 104,
+  "last_link_id": 72,
   "nodes": [
     {
       "id": 86,
@@ -76,42 +76,6 @@
       },
       "widgets_values": [
         "textEmbedding"
-      ]
-    },
-    {
-      "id": 100,
-      "type": "SetNode",
-      "pos": [
-        2916.776611328125,
-        -288.08544921875
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {},
-      "order": 14,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "LIGHT_WAN_MODEL",
-          "type": "LIGHT_WAN_MODEL",
-          "link": 65
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_WanModel",
-      "properties": {
-        "previousName": "WanModel"
-      },
-      "widgets_values": [
-        "WanModel"
       ]
     },
     {
@@ -364,7 +328,7 @@
         154
       ],
       "flags": {},
-      "order": 10,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
@@ -395,62 +359,6 @@
         "fp16",
         "cuda",
         ""
-      ]
-    },
-    {
-      "id": 88,
-      "type": "Lightx2vWanVideoModelLoader",
-      "pos": [
-        2540.527587890625,
-        -307.2720642089844
-      ],
-      "size": [
-        315,
-        274
-      ],
-      "flags": {},
-      "order": 9,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "teacache_args",
-          "shape": 7,
-          "type": "LIGHT_TEACACHEARGS",
-          "link": null
-        },
-        {
-          "name": "model_dir",
-          "shape": 7,
-          "type": "STRING",
-          "widget": {
-            "name": "model_dir"
-          },
-          "link": 69
-        }
-      ],
-      "outputs": [
-        {
-          "name": "wan_model",
-          "type": "LIGHT_WAN_MODEL",
-          "links": [
-            65
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "Lightx2vWanVideoModelLoader"
-      },
-      "widgets_values": [
-        "",
-        "i2v",
-        "bf16",
-        "cuda",
-        "flash_attn3",
-        false,
-        "Default",
-        "",
-        1.0700000000000003,
-        "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
       ]
     },
     {
@@ -538,57 +446,6 @@
       "widgets_values": []
     },
     {
-      "id": 90,
-      "type": "Lightx2vWanVideoSampler",
-      "pos": [
-        2430.891845703125,
-        129.44773864746094
-      ],
-      "size": [
-        327.5999755859375,
-        194
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "LIGHT_WAN_MODEL",
-          "link": 66
-        },
-        {
-          "name": "text_embeddings",
-          "type": "LIGHT_TEXT_EMBEDDINGS",
-          "link": 64
-        },
-        {
-          "name": "image_embeddings",
-          "type": "LIGHT_IMAGE_EMBEDDINGS",
-          "link": 62
-        }
-      ],
-      "outputs": [
-        {
-          "name": "latent",
-          "type": "LIGHT_LATENT",
-          "links": [
-            55
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "Lightx2vWanVideoSampler"
-      },
-      "widgets_values": [
-        20,
-        8,
-        1,
-        42,
-        "fixed"
-      ]
-    },
-    {
       "id": 85,
       "type": "Lightx2vWanVideoImageEncoder",
       "pos": [
@@ -600,7 +457,7 @@
         146
       ],
       "flags": {},
-      "order": 15,
+      "order": 14,
       "mode": 0,
       "inputs": [
         {
@@ -700,7 +557,7 @@
           "hidden": false,
           "paused": false,
           "params": {
-            "filename": "AnimateDiff_00019.mp4",
+            "filename": "AnimateDiff_00565.mp4",
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
@@ -709,40 +566,6 @@
           "muted": false
         }
       }
-    },
-    {
-      "id": 102,
-      "type": "Lightx2vWanVideoModelDir",
-      "pos": [
-        348.7199401855469,
-        -279.3098449707031
-      ],
-      "size": [
-        351.8695373535156,
-        146.87998962402344
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "STRING",
-          "type": "STRING",
-          "links": [
-            67,
-            68,
-            69,
-            70
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "Lightx2vWanVideoModelDir"
-      },
-      "widgets_values": [
-        "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-720P-cfg"
-      ]
     },
     {
       "id": 93,
@@ -756,7 +579,7 @@
         314.0000305175781
       ],
       "flags": {},
-      "order": 5,
+      "order": 4,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -779,6 +602,184 @@
       "widgets_values": [
         "img_0.jpg",
         "image"
+      ]
+    },
+    {
+      "id": 100,
+      "type": "SetNode",
+      "pos": [
+        2525.461669921875,
+        -330.6775207519531
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "LIGHT_WAN_MODEL",
+          "type": "LIGHT_WAN_MODEL",
+          "link": 72
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "Set_WanModel",
+      "properties": {
+        "previousName": "WanModel"
+      },
+      "widgets_values": [
+        "WanModel"
+      ]
+    },
+    {
+      "id": 104,
+      "type": "Lightx2vWanVideoModelLoader",
+      "pos": [
+        2172.787841796875,
+        -329.7485656738281
+      ],
+      "size": [
+        282.2554626464844,
+        298
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "teacache_args",
+          "shape": 7,
+          "type": "LIGHT_TEACACHEARGS",
+          "link": null
+        },
+        {
+          "name": "model_dir",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "model_dir"
+          },
+          "link": 71
+        }
+      ],
+      "outputs": [
+        {
+          "name": "wan_model",
+          "type": "LIGHT_WAN_MODEL",
+          "links": [
+            72
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoModelLoader"
+      },
+      "widgets_values": [
+        "",
+        "i2v",
+        "bf16",
+        "cuda",
+        "flash_attn3",
+        false,
+        "phase",
+        "",
+        "",
+        1,
+        "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-480P"
+      ]
+    },
+    {
+      "id": 102,
+      "type": "Lightx2vWanVideoModelDir",
+      "pos": [
+        348.7199401855469,
+        -279.3098449707031
+      ],
+      "size": [
+        351.8695373535156,
+        146.87998962402344
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model_dir",
+          "type": "STRING",
+          "links": [
+            67,
+            68,
+            70,
+            71
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoModelDir"
+      },
+      "widgets_values": [
+        "/mnt/aigc/users/lijiaqi2/wan_model/Wan2.1-I2V-14B-720P-cfg"
+      ]
+    },
+    {
+      "id": 90,
+      "type": "Lightx2vWanVideoSampler",
+      "pos": [
+        2430.891845703125,
+        129.44773864746094
+      ],
+      "size": [
+        327.5999755859375,
+        194
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "LIGHT_WAN_MODEL",
+          "link": 66
+        },
+        {
+          "name": "text_embeddings",
+          "type": "LIGHT_TEXT_EMBEDDINGS",
+          "link": 64
+        },
+        {
+          "name": "image_embeddings",
+          "type": "LIGHT_IMAGE_EMBEDDINGS",
+          "link": 62
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LIGHT_LATENT",
+          "links": [
+            55
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Lightx2vWanVideoSampler"
+      },
+      "widgets_values": [
+        20,
+        8,
+        1,
+        42,
+        "decrement"
       ]
     }
   ],
@@ -880,14 +881,6 @@
       "LIGHT_TEXT_EMBEDDINGS"
     ],
     [
-      65,
-      88,
-      0,
-      100,
-      0,
-      "*"
-    ],
-    [
       66,
       101,
       0,
@@ -912,20 +905,28 @@
       "STRING"
     ],
     [
-      69,
-      102,
-      0,
-      88,
-      1,
-      "STRING"
-    ],
-    [
       70,
       102,
       0,
       83,
       0,
       "STRING"
+    ],
+    [
+      71,
+      102,
+      0,
+      104,
+      1,
+      "STRING"
+    ],
+    [
+      72,
+      104,
+      0,
+      100,
+      0,
+      "LIGHT_WAN_MODEL"
     ]
   ],
   "groups": [
@@ -985,10 +986,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.7513148009015778,
+      "scale": 0.8264462809917354,
       "offset": [
-        -41.12401565861029,
-        -19.674610850016407
+        -1038.6861717665897,
+        160.02657251659417
       ]
     },
     "frontendVersion": "1.19.9"

@@ -16,12 +16,19 @@ from comfy.utils import ProgressBar
 
 from .config import LightX2VConfig, ModelConfig, VideoConfig, TeaCacheConfig
 from .factory import LightX2VFactory
-from .models import LightX2VT5Encoder, LightX2VClipVisionEncoder, LightX2VVae, LightX2VModel
+from .models import (
+    LightX2VT5Encoder,
+    LightX2VClipVisionEncoder,
+    LightX2VVae,
+    LightX2VModel,
+)
 
 # Import original LightX2V modules
 from ..lightx2v.lightx2v.utils.profiler import ProfilingContext
 from ..lightx2v.lightx2v.models.schedulers.wan.scheduler import WanScheduler
-from ..lightx2v.lightx2v.models.schedulers.wan.feature_caching.scheduler import WanSchedulerTeaCaching
+from ..lightx2v.lightx2v.models.schedulers.wan.feature_caching.scheduler import (
+    WanSchedulerTeaCaching,
+)
 
 
 # Coefficient values for TeaCache
@@ -503,9 +510,9 @@ class Lightx2vWanVideoImageEncoder(BaseNode):
 
         # Create video configuration
         video_config = VideoConfig(
-            width=width,
-            height=height,
-            num_frames=num_frames,
+            target_width=width,
+            target_height=height,
+            target_video_length=num_frames,
         )
 
         # Convert image format
@@ -584,7 +591,10 @@ class Lightx2vWanVideoEmptyEmbeds(BaseNode):
             "required": {
                 "width": ("INT", {"default": 832, "min": 64, "max": 2048, "step": 8}),
                 "height": ("INT", {"default": 480, "min": 64, "max": 2048, "step": 8}),
-                "num_frames": ("INT", {"default": 81, "min": 1, "max": 10000, "step": 4}),
+                "num_frames": (
+                    "INT",
+                    {"default": 81, "min": 1, "max": 10000, "step": 4},
+                ),
             }
         }
 
@@ -595,9 +605,9 @@ class Lightx2vWanVideoEmptyEmbeds(BaseNode):
     def process(self, num_frames: int, width: int, height: int) -> Tuple[Dict[str, Any]]:
         """Create empty image embeddings for T2V."""
         video_config = VideoConfig(
-            width=width,
-            height=height,
-            num_frames=num_frames,
+            target_width=width,
+            target_height=height,
+            target_video_length=num_frames,
         )
 
         return ({"config": video_config.to_easydict()},)
@@ -683,6 +693,7 @@ class Lightx2vWanVideoModelLoader(BaseNode):
             lora_path=Path(lora_path) if lora_path and lora_path.strip() else None,
             lora_strength=lora_strength,
             mm_config=mm_config,
+            feature_caching="Tea" if teacache_args else "NoCaching",
         )
 
         # Create model
@@ -691,7 +702,6 @@ class Lightx2vWanVideoModelLoader(BaseNode):
         # Add TeaCache config if provided
         easydict_config = model.easydict_config
         if teacache_args:
-            easydict_config.feature_caching = "Tea"
             easydict_config.teacache_thresh = teacache_args.rel_l1_thresh
             easydict_config.use_ret_steps = teacache_args.use_ret_steps
             easydict_config.coefficients = teacache_args.coefficients
@@ -721,7 +731,10 @@ class Lightx2vWanVideoSampler(BaseNode):
                     "FLOAT",
                     {"default": 5, "min": 1, "max": 20.0, "step": 0.1},
                 ),
-                "seed": ("INT", {"default": 42, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "step": 1}),
+                "seed": (
+                    "INT",
+                    {"default": 42, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "step": 1},
+                ),
             }
         }
 
