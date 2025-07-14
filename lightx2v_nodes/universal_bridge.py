@@ -9,10 +9,11 @@ from typing import Any, Dict, List, Union, Optional
 from PIL import Image
 import tempfile
 from easydict import EasyDict
+import asyncio
 
 from .config import get_available_attn_ops, get_available_quant_ops
 
-from ..lightx2v.lightx2v.utils.set_config import get_default_config
+from ..lightx2v.lightx2v.utils.set_config import get_default_config, set_config
 from ..lightx2v.lightx2v.infer import init_runner
 
 
@@ -23,7 +24,8 @@ class LightX2VBridge:
         self._model_registry = None
         self._config_registry = None
         self._quantization_registry = None
-        self._runners = {}  # Cache initialized runners
+        self._current_runner = None  # Only store one runner at a time
+        self._current_runner_key = None  # Track current runner identity
 
     @property
     def model_registry(self):
@@ -48,7 +50,7 @@ class LightX2VBridge:
 
     def _discover_models(self) -> List[str]:
         """Discover available model classes from LightX2V."""
-        return ["wan2.1", "hunyuan", "wan2.1_audio"]
+        return ["wan2.1", "hunyuan", "wan2.1_audio", "wan2.1_distill"]
 
     def _discover_configs(self) -> Dict[str, Dict]:
         """Discover all available config files for single-card inference."""
@@ -63,6 +65,20 @@ class LightX2VBridge:
 
                 # 排除分布式推理和部署相关的配置
                 if any(exclude in path_str for exclude in ["deploy", "causvid", "skyreels", "cogvideox"]):
+                    continue
+
+                # 包含蒸馏模型配置
+                if "distill" in path_str:
+                    config_info = {
+                        "path": config_file,
+                        "model_type": "wan2.1_distill",
+                        "task": self._extract_task_from_path(path_str),
+                        "is_quantized": False,
+                        "is_distilled": True,
+                        "description": self._generate_config_description(relative_path, is_distilled=True),
+                    }
+                    key = str(relative_path).replace("/", "_").replace(".json", "")
+                    configs[key] = config_info
                     continue
 
                 # 排除量化配置（单独处理）
@@ -115,7 +131,7 @@ class LightX2VBridge:
         else:
             return "unknown"
 
-    def _generate_config_description(self, relative_path: Path, is_quantized: bool = False) -> str:
+    def _generate_config_description(self, relative_path: Path, is_quantized: bool = False, is_distilled: bool = False) -> str:
         """Generate human-readable description for config."""
         parts = relative_path.parts
         model_type = parts[0] if not is_quantized else parts[1]
@@ -124,6 +140,8 @@ class LightX2VBridge:
         desc = f"{model_type.upper()} {task.upper()}"
         if is_quantized:
             desc += " (Quantized)"
+        if is_distilled:
+            desc += " (Distilled 4-step)"
 
         return desc
 
@@ -151,18 +169,27 @@ class LightX2VBridge:
 
     def get_runner(self, config: EasyDict):
         """Get or create a runner for the given config."""
-        # Create a unique key for this configuration
-        key = f"{config.model_cls}_{config.model_path}_{hash(str(config))}"
+        # Create a simple key based on essential parameters only
+        # Only model_cls and model_path are essential for runner identity
+        key = f"{config.model_cls}_{config.model_path}"
 
-        if key not in self._runners:
-            self._runners[key] = init_runner(config)
+        # If we have a different runner, clear the old one first
+        if self._current_runner_key != key:
+            self.clear_cache()
+            self._current_runner = init_runner(config)
+            self._current_runner_key = key
 
-        return self._runners[key]
+        return self._current_runner
 
     def clear_cache(self):
-        """Clear cached runners to free memory."""
-        self._runners.clear()
-        torch.cuda.empty_cache()
+        """Clear cached runner to free memory."""
+        if self._current_runner is not None:
+            # Clean up the runner if it has cleanup methods
+            if hasattr(self._current_runner, "cleanup"):
+                self._current_runner.cleanup()
+            self._current_runner = None
+            self._current_runner_key = None
+            torch.cuda.empty_cache()
 
 
 class InputOutputConverter:
@@ -375,6 +402,10 @@ class LightX2VConfigBuilder:
                 "LIGHTX2V_CONFIG",
                 {"tooltip": "缓存配置"},
             ),
+            "distill_config": (
+                "LIGHTX2V_CONFIG",
+                {"tooltip": "蒸馏配置"},
+            ),
             "lora_path": (
                 "STRING",
                 {"default": "", "tooltip": "LoRA权重路径"},
@@ -418,6 +449,7 @@ class LightX2VConfigBuilder:
         quantization_config=None,
         attention_config=None,
         caching_config=None,
+        distill_config=None,
         lora_path="",
         strength_model=1.0,
         **kwargs,
@@ -445,6 +477,8 @@ class LightX2VConfigBuilder:
             base_config.update(attention_config)
         if caching_config:
             base_config.update(caching_config)
+        if distill_config:
+            base_config.update(distill_config)
 
         # 准备覆盖参数
         overrides = {
@@ -599,9 +633,9 @@ class LightX2VCachingConfig:
         return {
             "required": {
                 "feature_caching": (
-                    ["None", "Tea", "Ada", "Custom"],
+                    ["NoCaching", "Tea", "TaylorSeer", "Ada", "Custom"],
                     {
-                        "default": "None",
+                        "default": "NoCaching",
                         "tooltip": "特征缓存类型",
                     },
                 ),
@@ -650,7 +684,7 @@ class LightX2VCachingConfig:
         """Build caching configuration."""
         config = {}
 
-        if feature_caching != "None":
+        if feature_caching != "NoCaching":
             config["feature_caching"] = feature_caching
 
             if feature_caching == "Tea":
@@ -662,6 +696,8 @@ class LightX2VCachingConfig:
                         config["coefficients"] = json.loads(coefficients)
                     except json.JSONDecodeError:
                         print(f"Failed to parse coefficients: {coefficients}")
+        else:
+            config["feature_caching"] = "NoCaching"
 
         return (config,)
 
@@ -717,37 +753,63 @@ class LightX2VInference:
     ):
         """Generate video using LightX2V."""
 
-        # 添加提示词到配置
+        # 直接使用传入的config (已经是EasyDict)
+        # 添加运行时需要的参数
         config.prompt = prompt
         config.negative_prompt = negative_prompt
+        config.mode = "infer"
 
-        # 处理i2v任务的图像输入
-        if config.task == "i2v" and image is not None:
-            # 保存图像到临时文件
-            pil_image = self.converter.comfy_image_to_pil(image)
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                pil_image.save(tmp.name)
-                config.image_path = tmp.name
+        # 处理输出路径
+        if not hasattr(config, "save_video_path") or config.save_video_path is None:
+            config.save_video_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
 
-        # 处理音频输入
-        if audio is not None and "audio" in config.model_cls:
-            audio_path = self.converter.comfy_audio_to_path(audio)
-            config.audio_path = audio_path
+        # 临时文件列表，用于清理
+        temp_files = []
 
-        # 创建临时配置文件（set_config需要）
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
-            json.dump(config.to_dict(), tmp)
-            config.config_json = tmp.name
-
-        # 获取或创建runner
         try:
+            # 处理i2v任务的图像输入
+            if config.task == "i2v" and image is not None:
+                # 保存图像到临时文件
+                pil_image = self.converter.comfy_image_to_pil(image)
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                    pil_image.save(tmp.name)
+                    config.image_path = tmp.name
+                    temp_files.append(tmp.name)
+
+            # 处理音频输入
+            if audio is not None and "audio" in config.model_cls:
+                audio_path = self.converter.comfy_audio_to_path(audio)
+                config.audio_path = audio_path
+                temp_files.append(audio_path)
+
+            # 检查模型路径的config.json
+            model_config_path = os.path.join(config.model_path, "config.json")
+            if os.path.exists(model_config_path):
+                with open(model_config_path, "r") as f:
+                    model_config = json.load(f)
+                config.update(model_config)
+
+            # 获取或创建runner
             runner = self.bridge.get_runner(config)
 
-            # 运行生成
-            result = runner.run_pipeline()
+            assert runner is not None, "Runner is None"
 
-            # 转换输出
-            if hasattr(result, "save_video_path"):
+            # 运行生成 - run_pipeline 是异步方法
+            if asyncio.iscoroutinefunction(runner.run_pipeline):
+                # 在同步环境中运行异步方法
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(runner.run_pipeline())
+                finally:
+                    loop.close()
+            else:
+                result = runner.run_pipeline()
+
+            # 检查结果是否已经保存到文件
+            if os.path.exists(config.save_video_path):
+                return (self.converter.video_to_latent(config.save_video_path),)
+            elif hasattr(result, "save_video_path") and os.path.exists(result.save_video_path):
                 return (self.converter.video_to_latent(result.save_video_path),)
             else:
                 # 假设张量输出
@@ -755,265 +817,106 @@ class LightX2VInference:
 
         finally:
             # 清理临时文件
-            if hasattr(config, "image_path") and os.path.exists(config.image_path):
-                os.unlink(config.image_path)
-            if hasattr(config, "audio_path") and os.path.exists(config.audio_path):
-                os.unlink(config.audio_path)
-            if hasattr(config, "config_json") and os.path.exists(config.config_json):
-                os.unlink(config.config_json)
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
 
 
-class LightX2VConfigViewer:
-    """View and display LightX2V configuration details."""
+class LightX2VDistillConfig:
+    """Configuration node for distillation settings."""
 
     @classmethod
     def INPUT_TYPES(cls):
-        """Define inputs for the config viewer."""
+        """Define inputs for distillation config."""
         return {
             "required": {
-                "config": ("LIGHTX2V_CONFIG", {"tooltip": "LightX2V配置"}),
+                "enable_distill": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": "启用蒸馏模型",
+                    },
+                ),
+                "infer_steps": (
+                    "INT",
+                    {
+                        "default": 4,
+                        "min": 1,
+                        "max": 50,
+                        "tooltip": "推理步数（蒸馏模型通常使用4步）",
+                    },
+                ),
+                "denoising_steps": (
+                    "STRING",
+                    {
+                        "default": "[999, 750, 500, 250]",
+                        "tooltip": "去噪步骤列表（JSON格式）",
+                    },
+                ),
+            },
+            "optional": {
+                "enable_cfg": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "启用CFG（分类器自由引导）",
+                    },
+                ),
+                "enable_dynamic_cfg": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "启用动态CFG",
+                    },
+                ),
+                "cfg_scale": (
+                    "FLOAT",
+                    {
+                        "default": 4.0,
+                        "min": 0.1,
+                        "max": 30.0,
+                        "step": 0.1,
+                        "tooltip": "动态CFG缩放比例",
+                    },
+                ),
             },
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("config_info",)
-    FUNCTION = "view_config"
-    CATEGORY = "LightX2V/Util"
+    RETURN_TYPES = ("LIGHTX2V_CONFIG",)
+    RETURN_NAMES = ("distill_config",)
+    FUNCTION = "build_distill_config"
+    CATEGORY = "LightX2V/Config"
 
-    def view_config(self, config):
-        """View configuration details."""
-        if hasattr(config, "to_dict"):
-            config_dict = config.to_dict()
-        else:
-            config_dict = dict(config)
-
-        config_str = json.dumps(config_dict, indent=2, ensure_ascii=False)
-        print(f"LightX2V Configuration:\n{config_str}")
-        return (config_str,)
-
-
-class UniversalLightX2VNode:
-    """Universal ComfyUI node for all LightX2V models (Legacy compatibility)."""
-
-    def __init__(self):
-        self.bridge = LightX2VBridge()
-        self.converter = InputOutputConverter()
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        """Define inputs for the node."""
-        bridge = LightX2VBridge()
-
-        # Get available models and configs
-        model_choices = bridge.model_registry
-
-        # 构建配置选项
-        config_choices = ["custom"]
-        config_descriptions = {}
-
-        # 添加普通配置
-        for key, config_info in bridge.config_registry.items():
-            config_choices.append(key)
-            config_descriptions[key] = config_info["description"]
-
-        # 添加量化配置
-        for key, config_info in bridge.quantization_registry.items():
-            config_choices.append(key)
-            config_descriptions[key] = config_info["description"]
-
-        # 构建用户可配置参数
-        required_inputs = {
-            "model_cls": (model_choices, {"tooltip": "选择模型类型"}),
-            "model_path": (
-                "STRING",
-                {"default": "", "tooltip": "模型权重路径（留空使用默认路径）"},
-            ),
-            "task": (
-                ["t2v", "i2v"],
-                {
-                    "default": "t2v",
-                    "tooltip": "任务类型: 文本到视频或图像到视频",
-                },
-            ),
-            "config_preset": (
-                config_choices,
-                {
-                    "default": "custom",
-                    "tooltip": "配置预设或'custom'自定义",
-                },
-            ),
-            "prompt": (
-                "STRING",
-                {
-                    "multiline": True,
-                    "default": "",
-                    "tooltip": "生成提示词",
-                },
-            ),
-            "negative_prompt": (
-                "STRING",
-                {"multiline": True, "default": "", "tooltip": "负面提示词"},
-            ),
-        }
-
-        # 添加用户可配置参数
-        for param_name, param_config in ConfigManager.USER_CONFIGURABLE_PARAMS.items():
-            required_inputs[param_name] = (
-                param_config["type"],
-                {
-                    "default": param_config["default"],
-                    "min": param_config["min"],
-                    "max": param_config["max"],
-                    "tooltip": param_config["tooltip"],
-                },
-            )
-            if "step" in param_config:
-                required_inputs[param_name][1]["step"] = param_config["step"]
-
-        optional_inputs = {
-            "image": ("IMAGE", {"tooltip": "i2v任务的输入图像"}),
-            "audio": (
-                "AUDIO",
-                {"tooltip": "音频驱动生成的输入音频"},
-            ),
-            "custom_config": (
-                "STRING",
-                {
-                    "multiline": True,
-                    "default": "{}",
-                    "tooltip": "自定义配置（JSON格式）",
-                },
-            ),
-            "lora_path": (
-                "STRING",
-                {"default": "", "tooltip": "LoRA权重路径"},
-            ),
-            "strength_model": (
-                "FLOAT",
-                {
-                    "default": 1.0,
-                    "min": 0.0,
-                    "max": 2.0,
-                    "step": 0.1,
-                    "tooltip": "LoRA模型强度",
-                },
-            ),
-        }
-
-        return {
-            "required": required_inputs,
-            "optional": optional_inputs,
-        }
-
-    RETURN_TYPES = ("LATENT",)
-    RETURN_NAMES = ("video",)
-    FUNCTION = "generate"
-    CATEGORY = "LightX2V/Universal"
-
-    def generate(
+    def build_distill_config(
         self,
-        model_cls,
-        model_path,
-        task,
-        config_preset,
-        prompt,
-        negative_prompt,
-        steps,
-        cfg_scale,
-        seed,
-        height,
-        width,
-        video_length,
-        sample_shift,
-        image=None,
-        audio=None,
-        custom_config="{}",
-        lora_path="",
-        strength_model=1.0,
-        **kwargs,
+        enable_distill,
+        infer_steps=4,
+        denoising_steps="[999, 750, 500, 250]",
+        enable_cfg=False,
+        enable_dynamic_cfg=False,
+        cfg_scale=4.0,
     ):
-        """Generate video using LightX2V."""
+        """Build distillation configuration."""
+        config = {}
 
-        # 加载基础配置
-        if config_preset == "custom":
-            base_config = {}
-            quantization_config = None
-        else:
-            # 检查是否为量化配置
-            if config_preset in self.bridge.quantization_registry:
-                config_info = self.bridge.quantization_registry[config_preset]
-                base_config = self.bridge.load_config(config_info["path"])
-                quantization_config = base_config
-            else:
-                config_info = self.bridge.config_registry.get(config_preset)
-                if config_info:
-                    base_config = self.bridge.load_config(config_info["path"])
-                    quantization_config = None
-                else:
-                    raise ValueError(f"配置预设 '{config_preset}' 未找到")
+        if enable_distill:
+            config["infer_steps"] = infer_steps
+            config["enable_cfg"] = enable_cfg
+            config["enable_dynamic_cfg"] = enable_dynamic_cfg
 
-        # 解析自定义配置
-        custom_cfg = ConfigManager.parse_custom_config(custom_config)
-        base_config.update(custom_cfg)
+            if enable_dynamic_cfg:
+                config["cfg_scale"] = cfg_scale
 
-        # 准备覆盖参数
-        overrides = {
-            "seed": seed if seed != -1 else None,
-            "steps": steps,
-            "cfg_scale": cfg_scale,
-            "height": height,
-            "width": width,
-            "video_length": video_length,
-            "sample_shift": sample_shift,
-            "lora_path": lora_path if lora_path else None,
-            "strength_model": strength_model,
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-        }
+            try:
+                config["denoising_step_list"] = json.loads(denoising_steps)
+                # 确保去噪步骤列表长度与推理步数匹配
+                if len(config["denoising_step_list"]) != infer_steps:
+                    print(f"Warning: denoising_step_list length ({len(config['denoising_step_list'])}) doesn't match infer_steps ({infer_steps})")
+            except json.JSONDecodeError:
+                print(f"Failed to parse denoising steps, using default: {denoising_steps}")
+                config["denoising_step_list"] = [999, 750, 500, 250]
 
-        # 处理i2v任务的图像输入
-        if task == "i2v" and image is not None:
-            # 保存图像到临时文件
-            pil_image = self.converter.comfy_image_to_pil(image)
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                pil_image.save(tmp.name)
-                overrides["image_path"] = tmp.name
-
-        # 处理音频输入
-        if audio is not None and "audio" in model_cls:
-            audio_path = self.converter.comfy_audio_to_path(audio)
-            overrides["audio_path"] = audio_path
-
-        # 创建最终配置
-        config = ConfigManager.create_config(model_cls, model_path, task, base_config, overrides, quantization_config)
-
-        # 创建临时配置文件（set_config需要）
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
-            json.dump(base_config, tmp)
-            config.config_json = tmp.name
-
-        # 获取或创建runner
-        try:
-            runner = self.bridge.get_runner(config)
-
-            # 运行生成
-            result = runner.run_pipeline()
-
-            # 转换输出
-            if hasattr(result, "save_video_path"):
-                return (self.converter.video_to_latent(result.save_video_path),)
-            else:
-                # 假设张量输出
-                return (self.converter.tensor_to_latent(result),)
-
-        finally:
-            # 清理临时文件
-            if "image_path" in overrides and os.path.exists(overrides["image_path"]):
-                os.unlink(overrides["image_path"])
-            if "audio_path" in overrides and os.path.exists(overrides["audio_path"]):
-                os.unlink(overrides["audio_path"])
-            if hasattr(config, "config_json") and os.path.exists(config.config_json):
-                os.unlink(config.config_json)
+        return (config,)
 
 
 # Node class mapping
@@ -1023,8 +926,8 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VQuantizationConfig": LightX2VQuantizationConfig,
     "LightX2VAttentionConfig": LightX2VAttentionConfig,
     "LightX2VCachingConfig": LightX2VCachingConfig,
+    "LightX2VDistillConfig": LightX2VDistillConfig,
     "LightX2VInference": LightX2VInference,
-    "LightX2VConfigViewer": LightX2VConfigViewer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1033,6 +936,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VQuantizationConfig": "LightX2V Quantization Config",
     "LightX2VAttentionConfig": "LightX2V Attention Config",
     "LightX2VCachingConfig": "LightX2V Caching Config",
+    "LightX2VDistillConfig": "LightX2V Distill Config",
     "LightX2VInference": "LightX2V Inference",
-    "LightX2VConfigViewer": "LightX2V Config Viewer",
 }
