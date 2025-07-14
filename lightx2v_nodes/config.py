@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 import torch
 from easydict import EasyDict
+import importlib.util
 
 
 @dataclass
@@ -159,3 +160,73 @@ class LightX2VConfig:
             config_dict["strength_model"] = self.model.lora_strength
 
         return EasyDict(config_dict)
+
+
+def is_fp8_supported_gpu():
+    if not torch.cuda.is_available():
+        return False
+    compute_capability = torch.cuda.get_device_capability(0)
+    major, minor = compute_capability
+    return (major == 8 and minor == 9) or (major >= 9)
+
+
+def is_module_installed(module_name):
+    try:
+        spec = importlib.util.find_spec(module_name)
+        return spec is not None
+    except ModuleNotFoundError:
+        return False
+
+
+def get_available_quant_ops():
+    available_ops = []
+
+    vllm_installed = is_module_installed("vllm")
+    if vllm_installed:
+        available_ops.append(("vllm", True))
+    else:
+        available_ops.append(("vllm", False))
+
+    sgl_installed = is_module_installed("sgl_kernel")
+    if sgl_installed:
+        available_ops.append(("sgl", True))
+    else:
+        available_ops.append(("sgl", False))
+
+    q8f_installed = is_module_installed("q8_kernels")
+    if q8f_installed:
+        available_ops.append(("q8f", True))
+    else:
+        available_ops.append(("q8f", False))
+
+    return available_ops
+
+
+def get_available_attn_ops():
+    available_ops = []
+
+    vllm_installed = is_module_installed("flash_attn")
+    if vllm_installed:
+        available_ops.append(("flash_attn2", True))
+    else:
+        available_ops.append(("flash_attn2", False))
+
+    sgl_installed = is_module_installed("flash_attn_interface")
+    if sgl_installed:
+        available_ops.append(("flash_attn3", True))
+    else:
+        available_ops.append(("flash_attn3", False))
+
+    q8f_installed = is_module_installed("sageattention")
+    if q8f_installed:
+        available_ops.append(("sage_attn2", True))
+    else:
+        available_ops.append(("sage_attn2", False))
+
+    torch_installed = is_module_installed("torch")
+    if torch_installed:
+        available_ops.append(("torch_sdpa", True))
+    else:
+        available_ops.append(("torch_sdpa", False))
+
+    return available_ops
