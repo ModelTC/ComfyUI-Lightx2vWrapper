@@ -1,5 +1,5 @@
 # Refactored LightX2V module
-from ..lightx2v.lightx2v.common.ops import *  # noqa: F401, F403 for import global register
+# from ..lightx2v.lightx2v.common.ops import *  # noqa: F401, F403 for import global register
 
 from .config import LightX2VConfig
 from .factory import LightX2VFactory

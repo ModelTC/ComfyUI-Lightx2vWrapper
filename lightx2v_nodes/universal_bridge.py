@@ -5,15 +5,15 @@ import os
 import torch
 import numpy as np
 from pathlib import Path
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, List, Union, Optional
 from PIL import Image
 import tempfile
 from easydict import EasyDict
 
-# Import LightX2V modules
-from ..lightx2v.utils.set_config import set_config, get_default_config
-from ..lightx2v.utils.registry_factory import RUNNER_REGISTER
-from ..lightx2v.infer import init_runner
+from .config import get_available_attn_ops, get_available_quant_ops
+
+from ..lightx2v.lightx2v.utils.set_config import get_default_config
+from ..lightx2v.lightx2v.infer import init_runner
 
 
 class LightX2VBridge:
@@ -22,6 +22,7 @@ class LightX2VBridge:
     def __init__(self):
         self._model_registry = None
         self._config_registry = None
+        self._quantization_registry = None
         self._runners = {}  # Cache initialized runners
 
     @property
@@ -38,13 +39,19 @@ class LightX2VBridge:
             self._config_registry = self._discover_configs()
         return self._config_registry
 
+    @property
+    def quantization_registry(self):
+        """Lazy load quantization registry."""
+        if self._quantization_registry is None:
+            self._quantization_registry = self._discover_quantization_configs()
+        return self._quantization_registry
+
     def _discover_models(self) -> List[str]:
         """Discover available model classes from LightX2V."""
-        # These are the known model classes from the infer.py
-        return ["wan2.1", "hunyuan", "wan2.1_distill", "wan2.1_causvid", "wan2.1_skyreels_v2_df", "cogvideox", "wan2.1_audio"]
+        return ["wan2.1", "hunyuan", "wan2.1_audio"]
 
-    def _discover_configs(self) -> Dict[str, Path]:
-        """Discover all available config files."""
+    def _discover_configs(self) -> Dict[str, Dict]:
+        """Discover all available config files for single-card inference."""
         configs = {}
         base_dir = Path(__file__).parent.parent / "lightx2v" / "configs"
 
@@ -52,10 +59,90 @@ class LightX2VBridge:
             for config_file in base_dir.rglob("*.json"):
                 # Create a descriptive key
                 relative_path = config_file.relative_to(base_dir)
+                path_str = str(relative_path)
+
+                # 排除分布式推理和部署相关的配置
+                if any(exclude in path_str for exclude in ["deploy", "causvid", "skyreels", "cogvideox"]):
+                    continue
+
+                # 排除量化配置（单独处理）
+                if "quantization" in path_str:
+                    continue
+
+                # 创建配置信息
+                config_info = {
+                    "path": config_file,
+                    "model_type": relative_path.parts[0],  # wan, hunyuan, etc.
+                    "task": self._extract_task_from_path(path_str),
+                    "is_quantized": False,
+                    "description": self._generate_config_description(relative_path),
+                }
+
                 key = str(relative_path).replace("/", "_").replace(".json", "")
-                configs[key] = config_file
+                configs[key] = config_info
 
         return configs
+
+    def _discover_quantization_configs(self) -> Dict[str, Dict]:
+        """Discover quantization configurations."""
+        quant_configs = {}
+        base_dir = Path(__file__).parent.parent / "lightx2v" / "configs" / "quantization"
+
+        if base_dir.exists():
+            for config_file in base_dir.rglob("*.json"):
+                relative_path = config_file.relative_to(base_dir.parent)
+                path_str = str(relative_path)
+
+                config_info = {
+                    "path": config_file,
+                    "model_type": relative_path.parts[1],  # wan, hunyuan, etc.
+                    "task": self._extract_task_from_path(path_str),
+                    "is_quantized": True,
+                    "description": self._generate_config_description(relative_path, is_quantized=True),
+                }
+
+                key = f"quant_{str(relative_path).replace('/', '_').replace('.json', '')}"
+                quant_configs[key] = config_info
+
+        return quant_configs
+
+    def _extract_task_from_path(self, path_str: str) -> str:
+        """Extract task type from config path."""
+        if "i2v" in path_str:
+            return "i2v"
+        elif "t2v" in path_str:
+            return "t2v"
+        else:
+            return "unknown"
+
+    def _generate_config_description(self, relative_path: Path, is_quantized: bool = False) -> str:
+        """Generate human-readable description for config."""
+        parts = relative_path.parts
+        model_type = parts[0] if not is_quantized else parts[1]
+        task = self._extract_task_from_path(str(relative_path))
+
+        desc = f"{model_type.upper()} {task.upper()}"
+        if is_quantized:
+            desc += " (Quantized)"
+
+        return desc
+
+    def get_quantization_model_path(self, model_type: str, mm_type: str) -> str:
+        """Get quantization model path based on model type and mm_type."""
+        # 定义量化模型的固定路径结构
+        base_path = Path(__file__).parent.parent / "lightx2v" / "models" / "quantized"
+
+        # 根据mm_type确定具体的模型文件名
+        mm_type_to_filename = {
+            "W-int8-channel-sym-A-int8-channel-sym-dynamic-Vllm": "int8_dynamic_vllm.safetensors",
+            "W-int8-channel-sym-A-fp16-dynamic-Vllm": "int8_fp16_dynamic_vllm.safetensors",
+            "W-fp16-A-fp16-dynamic-Vllm": "fp16_dynamic_vllm.safetensors",
+        }
+
+        filename = mm_type_to_filename.get(mm_type, "default_quantized.safetensors")
+        model_path = base_path / model_type / filename
+
+        return str(model_path)
 
     def load_config(self, config_path: Union[str, Path]) -> Dict:
         """Load a config file."""
@@ -131,8 +218,27 @@ class ConfigManager:
         "video_length": "target_video_length",
     }
 
+    # 用户可配置的参数（在ComfyUI中显示）
+    USER_CONFIGURABLE_PARAMS = {
+        "steps": {"type": "INT", "default": -1, "min": 1, "max": 200, "tooltip": "推理步数 (-1使用默认值)"},
+        "cfg_scale": {"type": "FLOAT", "default": -1, "min": 0.1, "max": 30, "step": 0.1, "tooltip": "CFG引导强度 (-1使用默认值)"},
+        "seed": {"type": "INT", "default": -1, "min": -1, "max": 2**32 - 1, "tooltip": "随机种子 (-1随机)"},
+        "height": {"type": "INT", "default": -1, "min": 64, "max": 2048, "step": 8, "tooltip": "视频高度 (-1使用默认值)"},
+        "width": {"type": "INT", "default": -1, "min": 64, "max": 2048, "step": 8, "tooltip": "视频宽度 (-1使用默认值)"},
+        "video_length": {"type": "INT", "default": -1, "min": 1, "max": 300, "tooltip": "视频帧数 (-1使用默认值)"},
+        "sample_shift": {"type": "INT", "default": -1, "min": 0, "max": 20, "tooltip": "采样偏移 (-1使用默认值)"},
+    }
+
     @classmethod
-    def create_config(cls, model_cls: str, model_path: str, task: str, base_config: Dict, overrides: Dict) -> EasyDict:
+    def create_config(
+        cls,
+        model_cls: str,
+        model_path: str,
+        task: str,
+        base_config: Dict,
+        overrides: Dict,
+        quantization_config: Optional[Dict] = None,
+    ) -> EasyDict:
         """Create a complete config for LightX2V runner."""
         # Start with default config
         config = get_default_config()
@@ -150,6 +256,14 @@ class ConfigManager:
         # Apply base config from file
         config.update(base_config)
 
+        # Apply quantization config if provided
+        if quantization_config:
+            config.update(quantization_config)
+            # 自动设置量化模型路径
+            if "mm_config" in quantization_config and "mm_type" in quantization_config["mm_config"]:
+                mm_type = quantization_config["mm_config"]["mm_type"]
+                config["dit_quantized_ckpt"] = cls._get_quantization_model_path(model_cls, mm_type)
+
         # Apply ComfyUI overrides
         for comfy_key, value in overrides.items():
             if value is not None and value != -1:  # -1 means use default
@@ -161,6 +275,12 @@ class ConfigManager:
                     config[comfy_key] = value
 
         return EasyDict(config)
+
+    @classmethod
+    def _get_quantization_model_path(cls, model_cls: str, mm_type: str) -> str:
+        """Get quantization model path based on model class and mm_type."""
+        bridge = LightX2VBridge()
+        return bridge.get_quantization_model_path(model_cls, mm_type)
 
     @classmethod
     def parse_custom_config(cls, custom_config_str: str) -> Dict:
@@ -189,30 +309,103 @@ class UniversalLightX2VNode:
 
         # Get available models and configs
         model_choices = bridge.model_registry
-        config_choices = ["custom"] + list(bridge.config_registry.keys())
+
+        # 构建配置选项
+        config_choices = ["custom"]
+        config_descriptions = {}
+
+        # 添加普通配置
+        for key, config_info in bridge.config_registry.items():
+            config_choices.append(key)
+            config_descriptions[key] = config_info["description"]
+
+        # 添加量化配置
+        for key, config_info in bridge.quantization_registry.items():
+            config_choices.append(key)
+            config_descriptions[key] = config_info["description"]
+
+        # 构建用户可配置参数
+        required_inputs = {
+            "model_cls": (model_choices, {"tooltip": "选择模型类型"}),
+            "model_path": (
+                "STRING",
+                {"default": "", "tooltip": "模型权重路径（留空使用默认路径）"},
+            ),
+            "task": (
+                ["t2v", "i2v"],
+                {
+                    "default": "t2v",
+                    "tooltip": "任务类型: 文本到视频或图像到视频",
+                },
+            ),
+            "config_preset": (
+                config_choices,
+                {
+                    "default": "custom",
+                    "tooltip": "配置预设或'custom'自定义",
+                },
+            ),
+            "prompt": (
+                "STRING",
+                {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "生成提示词",
+                },
+            ),
+            "negative_prompt": (
+                "STRING",
+                {"multiline": True, "default": "", "tooltip": "负面提示词"},
+            ),
+        }
+
+        # 添加用户可配置参数
+        for param_name, param_config in ConfigManager.USER_CONFIGURABLE_PARAMS.items():
+            required_inputs[param_name] = (
+                param_config["type"],
+                {
+                    "default": param_config["default"],
+                    "min": param_config["min"],
+                    "max": param_config["max"],
+                    "tooltip": param_config["tooltip"],
+                },
+            )
+            if "step" in param_config:
+                required_inputs[param_name][1]["step"] = param_config["step"]
+
+        optional_inputs = {
+            "image": ("IMAGE", {"tooltip": "i2v任务的输入图像"}),
+            "audio": (
+                "AUDIO",
+                {"tooltip": "音频驱动生成的输入音频"},
+            ),
+            "custom_config": (
+                "STRING",
+                {
+                    "multiline": True,
+                    "default": "{}",
+                    "tooltip": "自定义配置（JSON格式）",
+                },
+            ),
+            "lora_path": (
+                "STRING",
+                {"default": "", "tooltip": "LoRA权重路径"},
+            ),
+            "strength_model": (
+                "FLOAT",
+                {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                    "tooltip": "LoRA模型强度",
+                },
+            ),
+        }
 
         return {
-            "required": {
-                "model_cls": (model_choices, {"tooltip": "Model class to use"}),
-                "model_path": ("STRING", {"default": "", "tooltip": "Path to model weights"}),
-                "task": (["t2v", "i2v"], {"default": "t2v", "tooltip": "Task type: text-to-video or image-to-video"}),
-                "config_preset": (config_choices, {"default": "custom", "tooltip": "Configuration preset or 'custom'"}),
-                "prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "Text prompt for generation"}),
-                "negative_prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "Negative prompt"}),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**32 - 1, "tooltip": "Random seed (-1 for random)"}),
-                "steps": ("INT", {"default": -1, "min": -1, "max": 200, "tooltip": "Inference steps (-1 for default)"}),
-                "cfg_scale": ("FLOAT", {"default": -1, "min": -1, "max": 30, "step": 0.1, "tooltip": "Guidance scale (-1 for default)"}),
-            },
-            "optional": {
-                "image": ("IMAGE", {"tooltip": "Input image for i2v task"}),
-                "audio": ("AUDIO", {"tooltip": "Input audio for audio-driven generation"}),
-                "custom_config": ("STRING", {"multiline": True, "default": "{}", "tooltip": "Custom configuration in JSON format"}),
-                "lora_path": ("STRING", {"default": "", "tooltip": "Path to LoRA weights"}),
-                "strength_model": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1, "tooltip": "Model strength for LoRA"}),
-                "height": ("INT", {"default": -1, "min": -1, "max": 2048, "step": 8, "tooltip": "Video height (-1 for default)"}),
-                "width": ("INT", {"default": -1, "min": -1, "max": 2048, "step": 8, "tooltip": "Video width (-1 for default)"}),
-                "video_length": ("INT", {"default": -1, "min": -1, "max": 300, "tooltip": "Number of frames (-1 for default)"}),
-            },
+            "required": required_inputs,
+            "optional": optional_inputs,
         }
 
     RETURN_TYPES = ("LATENT",)
@@ -228,36 +421,45 @@ class UniversalLightX2VNode:
         config_preset,
         prompt,
         negative_prompt,
-        seed,
         steps,
         cfg_scale,
+        seed,
+        height,
+        width,
+        video_length,
+        sample_shift,
         image=None,
         audio=None,
         custom_config="{}",
         lora_path="",
         strength_model=1.0,
-        height=-1,
-        width=-1,
-        video_length=-1,
         **kwargs,
     ):
         """Generate video using LightX2V."""
 
-        # Load base configuration
+        # 加载基础配置
         if config_preset == "custom":
             base_config = {}
+            quantization_config = None
         else:
-            config_path = self.bridge.config_registry.get(config_preset)
-            if config_path:
-                base_config = self.bridge.load_config(config_path)
+            # 检查是否为量化配置
+            if config_preset in self.bridge.quantization_registry:
+                config_info = self.bridge.quantization_registry[config_preset]
+                base_config = self.bridge.load_config(config_info["path"])
+                quantization_config = base_config
             else:
-                raise ValueError(f"Config preset '{config_preset}' not found")
+                config_info = self.bridge.config_registry.get(config_preset)
+                if config_info:
+                    base_config = self.bridge.load_config(config_info["path"])
+                    quantization_config = None
+                else:
+                    raise ValueError(f"配置预设 '{config_preset}' 未找到")
 
-        # Parse custom config
+        # 解析自定义配置
         custom_cfg = ConfigManager.parse_custom_config(custom_config)
         base_config.update(custom_cfg)
 
-        # Prepare overrides
+        # 准备覆盖参数
         overrides = {
             "seed": seed if seed != -1 else None,
             "steps": steps,
@@ -265,49 +467,50 @@ class UniversalLightX2VNode:
             "height": height,
             "width": width,
             "video_length": video_length,
+            "sample_shift": sample_shift,
             "lora_path": lora_path if lora_path else None,
             "strength_model": strength_model,
             "prompt": prompt,
             "negative_prompt": negative_prompt,
         }
 
-        # Handle image input for i2v
+        # 处理i2v任务的图像输入
         if task == "i2v" and image is not None:
-            # Save image to temporary file
+            # 保存图像到临时文件
             pil_image = self.converter.comfy_image_to_pil(image)
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
                 pil_image.save(tmp.name)
                 overrides["image_path"] = tmp.name
 
-        # Handle audio input
+        # 处理音频输入
         if audio is not None and "audio" in model_cls:
             audio_path = self.converter.comfy_audio_to_path(audio)
             overrides["audio_path"] = audio_path
 
-        # Create final config
-        config = ConfigManager.create_config(model_cls, model_path, task, base_config, overrides)
+        # 创建最终配置
+        config = ConfigManager.create_config(model_cls, model_path, task, base_config, overrides, quantization_config)
 
-        # Create a temporary config file (required by set_config)
+        # 创建临时配置文件（set_config需要）
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             json.dump(base_config, tmp)
             config.config_json = tmp.name
 
-        # Get or create runner
+        # 获取或创建runner
         try:
             runner = self.bridge.get_runner(config)
 
-            # Run generation
+            # 运行生成
             result = runner.run_pipeline()
 
-            # Convert output
+            # 转换输出
             if hasattr(result, "save_video_path"):
                 return (self.converter.video_to_latent(result.save_video_path),)
             else:
-                # Assume tensor output
+                # 假设张量输出
                 return (self.converter.tensor_to_latent(result),)
 
         finally:
-            # Cleanup temporary files
+            # 清理临时文件
             if "image_path" in overrides and os.path.exists(overrides["image_path"]):
                 os.unlink(overrides["image_path"])
             if "audio_path" in overrides and os.path.exists(overrides["audio_path"]):
