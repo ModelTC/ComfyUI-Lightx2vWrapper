@@ -44,7 +44,7 @@ your_model_dir/
 ### 推荐模型
 
 - **Wan2.1-I2V-14B-480P**: 图像生成视频模型(480p分辨率)
-- **Wan2.1-I2V-14B-720P**: 图像生成视频模型(720p分辨率) 
+- **Wan2.1-I2V-14B-720P**: 图像生成视频模型(720p分辨率)
 - **Wan2.1-T2V-14B**: 文本生成视频模型
 
 ## 使用方法
@@ -83,11 +83,13 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
 ### 核心节点
 
 #### Lightx2vWanVideoModelDir
+
 - **功能**: 设置模型目录路径
-- **输入**: 
+- **输入**:
   - `model_dir`: 模型目录路径
 
 #### Lightx2vWanVideoT5EncoderLoader  
+
 - **功能**: 加载T5文本编码器
 - **输入**:
   - `model_name`: T5模型文件名
@@ -95,6 +97,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `device`: 设备(cuda/cpu)
 
 #### Lightx2vWanVideoT5Encoder
+
 - **功能**: 编码文本提示词
 - **输入**:
   - `t5_encoder`: T5编码器实例
@@ -102,6 +105,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `negative_prompt`: 负面提示词
 
 #### Lightx2vWanVideoVaeLoader
+
 - **功能**: 加载VAE模型
 - **输入**:
   - `model_name`: VAE模型文件名
@@ -110,6 +114,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `parallel`: 是否并行处理
 
 #### Lightx2vWanVideoImageEncoder
+
 - **功能**: 编码输入图像用于I2V生成
 - **输入**:
   - `vae`: VAE模型实例
@@ -119,6 +124,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `num_frames`: 生成帧数
 
 #### Lightx2vWanVideoModelLoader
+
 - **功能**: 加载主要的Wan生成模型
 - **输入**:
   - `model_type`: 模型类型(t2v/i2v)
@@ -129,6 +135,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `teacache_args`: TeaCache参数(可选)
 
 #### Lightx2vWanVideoSampler
+
 - **功能**: 执行视频生成采样
 - **输入**:
   - `model`: Wan模型实例
@@ -139,6 +146,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `seed`: 随机种子
 
 #### Lightx2vWanVideoVaeDecoder
+
 - **功能**: 解码潜在表示为视频帧
 - **输入**:
   - `wan_vae`: VAE模型实例
@@ -147,6 +155,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
 ### 优化节点
 
 #### Lightx2vTeaCache
+
 - **功能**: TeaCache加速配置
 - **输入**:
   - `rel_l1_thresh`: 缓存阈值
@@ -155,6 +164,7 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
   - `cache_device`: 缓存设备
 
 #### Lightx2vWanVideoEmptyEmbeds
+
 - **功能**: 为T2V任务提供空图像嵌入
 - **输入**:
   - `width/height`: 目标分辨率
@@ -163,20 +173,24 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
 ## 参数说明
 
 ### 分辨率设置
+
 - **480P**: width=832, height=480
 - **720P**: width=1280, height=720
 - 确保宽高为8的倍数
 
 ### 帧数设置
+
 - 推荐帧数: 81帧 (约5秒 @ 16fps)
 - 帧数应为4的倍数+1 (如: 81, 85, 89等)
 
 ### 精度选择
+
 - **bf16**: 推荐用于主模型，平衡精度和性能
 - **fp16**: 适用于VAE和CLIP，节省显存
 - **fp32**: 最高精度，显存占用大
 
 ### CFG引导
+
 - **CFG Scale**: 1.0-20.0，值越高越遵循提示词
 - **推荐值**: 5.0-8.0
 
@@ -213,3 +227,9 @@ T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像�
 - 集成TeaCache加速功能  
 - 添加LoRA微调支持
 - 优化内存管理和性能
+
+## 参考资料
+
+- [Develop Custom Nodes](https://docs.comfy.org/custom-nodes/walkthrough)
+- [一份ComfyUI 自定义节点指南](https://developer.volcengine.com/articles/7399549896778317833)
+- [Lightx2v](https://github.com/ModelTC/lightx2v)
