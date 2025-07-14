@@ -295,8 +295,505 @@ class ConfigManager:
             return {}
 
 
+class LightX2VConfigBuilder:
+    """Build LightX2V configuration from various sources."""
+
+    def __init__(self):
+        self.bridge = LightX2VBridge()
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        """Define inputs for the config builder."""
+        bridge = LightX2VBridge()
+
+        # Get available models and configs
+        model_choices = bridge.model_registry
+
+        # 构建配置选项
+        config_choices = ["custom"]
+        config_descriptions = {}
+
+        # 添加普通配置
+        for key, config_info in bridge.config_registry.items():
+            config_choices.append(key)
+            config_descriptions[key] = config_info["description"]
+
+        required_inputs = {
+            "model_cls": (model_choices, {"tooltip": "选择模型类型"}),
+            "model_path": (
+                "STRING",
+                {"default": "", "tooltip": "模型权重路径（留空使用默认路径）"},
+            ),
+            "task": (
+                ["t2v", "i2v"],
+                {
+                    "default": "t2v",
+                    "tooltip": "任务类型: 文本到视频或图像到视频",
+                },
+            ),
+            "config_preset": (
+                config_choices,
+                {
+                    "default": "custom",
+                    "tooltip": "配置预设或'custom'自定义",
+                },
+            ),
+        }
+
+        # 添加用户可配置参数
+        for param_name, param_config in ConfigManager.USER_CONFIGURABLE_PARAMS.items():
+            required_inputs[param_name] = (
+                param_config["type"],
+                {
+                    "default": param_config["default"],
+                    "min": param_config["min"],
+                    "max": param_config["max"],
+                    "tooltip": param_config["tooltip"],
+                },
+            )
+            if "step" in param_config:
+                required_inputs[param_name][1]["step"] = param_config["step"]
+
+        optional_inputs = {
+            "custom_config": (
+                "STRING",
+                {
+                    "multiline": True,
+                    "default": "{}",
+                    "tooltip": "自定义配置（JSON格式）",
+                },
+            ),
+            "quantization_config": (
+                "LIGHTX2V_CONFIG",
+                {"tooltip": "量化配置"},
+            ),
+            "attention_config": (
+                "LIGHTX2V_CONFIG",
+                {"tooltip": "注意力机制配置"},
+            ),
+            "caching_config": (
+                "LIGHTX2V_CONFIG",
+                {"tooltip": "缓存配置"},
+            ),
+            "lora_path": (
+                "STRING",
+                {"default": "", "tooltip": "LoRA权重路径"},
+            ),
+            "strength_model": (
+                "FLOAT",
+                {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                    "tooltip": "LoRA模型强度",
+                },
+            ),
+        }
+
+        return {
+            "required": required_inputs,
+            "optional": optional_inputs,
+        }
+
+    RETURN_TYPES = ("LIGHTX2V_CONFIG",)
+    RETURN_NAMES = ("config",)
+    FUNCTION = "build_config"
+    CATEGORY = "LightX2V/Config"
+
+    def build_config(
+        self,
+        model_cls,
+        model_path,
+        task,
+        config_preset,
+        steps,
+        cfg_scale,
+        seed,
+        height,
+        width,
+        video_length,
+        sample_shift,
+        custom_config="{}",
+        quantization_config=None,
+        attention_config=None,
+        caching_config=None,
+        lora_path="",
+        strength_model=1.0,
+        **kwargs,
+    ):
+        """Build configuration for LightX2V inference."""
+
+        # 加载基础配置
+        if config_preset == "custom":
+            base_config = {}
+        else:
+            config_info = self.bridge.config_registry.get(config_preset)
+            if config_info:
+                base_config = self.bridge.load_config(config_info["path"])
+            else:
+                raise ValueError(f"配置预设 '{config_preset}' 未找到")
+
+        # 解析自定义配置
+        custom_cfg = ConfigManager.parse_custom_config(custom_config)
+        base_config.update(custom_cfg)
+
+        # 合并其他配置
+        if quantization_config:
+            base_config.update(quantization_config)
+        if attention_config:
+            base_config.update(attention_config)
+        if caching_config:
+            base_config.update(caching_config)
+
+        # 准备覆盖参数
+        overrides = {
+            "seed": seed if seed != -1 else None,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "height": height,
+            "width": width,
+            "video_length": video_length,
+            "sample_shift": sample_shift,
+            "lora_path": lora_path if lora_path else None,
+            "strength_model": strength_model,
+        }
+
+        # 创建最终配置
+        config = ConfigManager.create_config(model_cls, model_path, task, base_config, overrides)
+
+        return (config,)
+
+
+class LightX2VQuantizationConfig:
+    """Configuration node for quantization settings."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        """Define inputs for quantization config."""
+        bridge = LightX2VBridge()
+
+        # Get available quantization configs
+        quant_choices = ["custom"]
+        for key, config_info in bridge.quantization_registry.items():
+            quant_choices.append(key)
+
+        return {
+            "required": {
+                "quantization_preset": (
+                    quant_choices,
+                    {
+                        "default": "custom",
+                        "tooltip": "量化配置预设",
+                    },
+                ),
+            },
+            "optional": {
+                "mm_type": (
+                    [
+                        "W-int8-channel-sym-A-int8-channel-sym-dynamic-Vllm",
+                        "W-int8-channel-sym-A-fp16-dynamic-Vllm",
+                        "W-fp16-A-fp16-dynamic-Vllm",
+                    ],
+                    {
+                        "default": "W-int8-channel-sym-A-int8-channel-sym-dynamic-Vllm",
+                        "tooltip": "量化类型",
+                    },
+                ),
+                "dit_quantized_ckpt": (
+                    "STRING",
+                    {"default": "", "tooltip": "量化模型路径"},
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("LIGHTX2V_CONFIG",)
+    RETURN_NAMES = ("quantization_config",)
+    FUNCTION = "build_quantization_config"
+    CATEGORY = "LightX2V/Config"
+
+    def build_quantization_config(
+        self,
+        quantization_preset,
+        mm_type="W-int8-channel-sym-A-int8-channel-sym-dynamic-Vllm",
+        dit_quantized_ckpt="",
+    ):
+        """Build quantization configuration."""
+        bridge = LightX2VBridge()
+
+        if quantization_preset == "custom":
+            config = {
+                "mm_config": {"mm_type": mm_type},
+            }
+            if dit_quantized_ckpt:
+                config["dit_quantized_ckpt"] = dit_quantized_ckpt
+        else:
+            config_info = bridge.quantization_registry.get(quantization_preset)
+            if config_info:
+                config = bridge.load_config(config_info["path"])
+            else:
+                raise ValueError(f"量化配置 '{quantization_preset}' 未找到")
+
+        return (config,)
+
+
+class LightX2VAttentionConfig:
+    """Configuration node for attention mechanisms."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        """Define inputs for attention config."""
+        return {
+            "required": {
+                "self_attn_1_type": (
+                    ["flash_attn3", "sage_attn2", "radial_attn", "sparge_attn"],
+                    {
+                        "default": "flash_attn3",
+                        "tooltip": "自注意力类型",
+                    },
+                ),
+                "cross_attn_1_type": (
+                    ["flash_attn3", "sage_attn2", "radial_attn", "sparge_attn"],
+                    {
+                        "default": "flash_attn3",
+                        "tooltip": "交叉注意力1类型",
+                    },
+                ),
+                "cross_attn_2_type": (
+                    ["flash_attn3", "sage_attn2", "radial_attn", "sparge_attn"],
+                    {
+                        "default": "flash_attn3",
+                        "tooltip": "交叉注意力2类型",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("LIGHTX2V_CONFIG",)
+    RETURN_NAMES = ("attention_config",)
+    FUNCTION = "build_attention_config"
+    CATEGORY = "LightX2V/Config"
+
+    def build_attention_config(
+        self,
+        self_attn_1_type,
+        cross_attn_1_type,
+        cross_attn_2_type,
+    ):
+        """Build attention configuration."""
+        config = {
+            "self_attn_1_type": self_attn_1_type,
+            "cross_attn_1_type": cross_attn_1_type,
+            "cross_attn_2_type": cross_attn_2_type,
+        }
+
+        return (config,)
+
+
+class LightX2VCachingConfig:
+    """Configuration node for caching mechanisms."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        """Define inputs for caching config."""
+        return {
+            "required": {
+                "feature_caching": (
+                    ["None", "Tea", "Ada", "Custom"],
+                    {
+                        "default": "None",
+                        "tooltip": "特征缓存类型",
+                    },
+                ),
+            },
+            "optional": {
+                "teacache_thresh": (
+                    "FLOAT",
+                    {
+                        "default": 0.26,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.01,
+                        "tooltip": "TeaCache阈值",
+                    },
+                ),
+                "use_ret_steps": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": "使用返回步骤",
+                    },
+                ),
+                "coefficients": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "tooltip": "系数配置（JSON格式）",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("LIGHTX2V_CONFIG",)
+    RETURN_NAMES = ("caching_config",)
+    FUNCTION = "build_caching_config"
+    CATEGORY = "LightX2V/Config"
+
+    def build_caching_config(
+        self,
+        feature_caching,
+        teacache_thresh=0.26,
+        use_ret_steps=True,
+        coefficients="",
+    ):
+        """Build caching configuration."""
+        config = {}
+
+        if feature_caching != "None":
+            config["feature_caching"] = feature_caching
+
+            if feature_caching == "Tea":
+                config["teacache_thresh"] = teacache_thresh
+                config["use_ret_steps"] = use_ret_steps
+
+                if coefficients:
+                    try:
+                        config["coefficients"] = json.loads(coefficients)
+                    except json.JSONDecodeError:
+                        print(f"Failed to parse coefficients: {coefficients}")
+
+        return (config,)
+
+
+class LightX2VInference:
+    """LightX2V inference node that accepts configuration and runs generation."""
+
+    def __init__(self):
+        self.bridge = LightX2VBridge()
+        self.converter = InputOutputConverter()
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        """Define inputs for the inference node."""
+        return {
+            "required": {
+                "config": ("LIGHTX2V_CONFIG", {"tooltip": "LightX2V配置"}),
+                "prompt": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "",
+                        "tooltip": "生成提示词",
+                    },
+                ),
+                "negative_prompt": (
+                    "STRING",
+                    {"multiline": True, "default": "", "tooltip": "负面提示词"},
+                ),
+            },
+            "optional": {
+                "image": ("IMAGE", {"tooltip": "i2v任务的输入图像"}),
+                "audio": (
+                    "AUDIO",
+                    {"tooltip": "音频驱动生成的输入音频"},
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("video",)
+    FUNCTION = "generate"
+    CATEGORY = "LightX2V/Inference"
+
+    def generate(
+        self,
+        config,
+        prompt,
+        negative_prompt,
+        image=None,
+        audio=None,
+        **kwargs,
+    ):
+        """Generate video using LightX2V."""
+
+        # 添加提示词到配置
+        config.prompt = prompt
+        config.negative_prompt = negative_prompt
+
+        # 处理i2v任务的图像输入
+        if config.task == "i2v" and image is not None:
+            # 保存图像到临时文件
+            pil_image = self.converter.comfy_image_to_pil(image)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                pil_image.save(tmp.name)
+                config.image_path = tmp.name
+
+        # 处理音频输入
+        if audio is not None and "audio" in config.model_cls:
+            audio_path = self.converter.comfy_audio_to_path(audio)
+            config.audio_path = audio_path
+
+        # 创建临时配置文件（set_config需要）
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
+            json.dump(config.to_dict(), tmp)
+            config.config_json = tmp.name
+
+        # 获取或创建runner
+        try:
+            runner = self.bridge.get_runner(config)
+
+            # 运行生成
+            result = runner.run_pipeline()
+
+            # 转换输出
+            if hasattr(result, "save_video_path"):
+                return (self.converter.video_to_latent(result.save_video_path),)
+            else:
+                # 假设张量输出
+                return (self.converter.tensor_to_latent(result),)
+
+        finally:
+            # 清理临时文件
+            if hasattr(config, "image_path") and os.path.exists(config.image_path):
+                os.unlink(config.image_path)
+            if hasattr(config, "audio_path") and os.path.exists(config.audio_path):
+                os.unlink(config.audio_path)
+            if hasattr(config, "config_json") and os.path.exists(config.config_json):
+                os.unlink(config.config_json)
+
+
+class LightX2VConfigViewer:
+    """View and display LightX2V configuration details."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        """Define inputs for the config viewer."""
+        return {
+            "required": {
+                "config": ("LIGHTX2V_CONFIG", {"tooltip": "LightX2V配置"}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("config_info",)
+    FUNCTION = "view_config"
+    CATEGORY = "LightX2V/Util"
+
+    def view_config(self, config):
+        """View configuration details."""
+        if hasattr(config, "to_dict"):
+            config_dict = config.to_dict()
+        else:
+            config_dict = dict(config)
+
+        config_str = json.dumps(config_dict, indent=2, ensure_ascii=False)
+        print(f"LightX2V Configuration:\n{config_str}")
+        return (config_str,)
+
+
 class UniversalLightX2VNode:
-    """Universal ComfyUI node for all LightX2V models."""
+    """Universal ComfyUI node for all LightX2V models (Legacy compatibility)."""
 
     def __init__(self):
         self.bridge = LightX2VBridge()
@@ -521,9 +1018,21 @@ class UniversalLightX2VNode:
 
 # Node class mapping
 NODE_CLASS_MAPPINGS = {
-    "UniversalLightX2V": UniversalLightX2VNode,
+    # Modular nodes
+    "LightX2VConfigBuilder": LightX2VConfigBuilder,
+    "LightX2VQuantizationConfig": LightX2VQuantizationConfig,
+    "LightX2VAttentionConfig": LightX2VAttentionConfig,
+    "LightX2VCachingConfig": LightX2VCachingConfig,
+    "LightX2VInference": LightX2VInference,
+    "LightX2VConfigViewer": LightX2VConfigViewer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "UniversalLightX2V": "LightX2V Universal Generator",
+    # Modular nodes
+    "LightX2VConfigBuilder": "LightX2V Config Builder",
+    "LightX2VQuantizationConfig": "LightX2V Quantization Config",
+    "LightX2VAttentionConfig": "LightX2V Attention Config",
+    "LightX2VCachingConfig": "LightX2V Caching Config",
+    "LightX2VInference": "LightX2V Inference",
+    "LightX2VConfigViewer": "LightX2V Config Viewer",
 }
