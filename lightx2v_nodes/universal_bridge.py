@@ -10,6 +10,7 @@ from PIL import Image
 import tempfile
 from easydict import EasyDict
 import asyncio
+import gc
 
 # from .config import get_available_attn_ops, get_available_quant_ops
 
@@ -131,7 +132,12 @@ class LightX2VBridge:
         else:
             return "unknown"
 
-    def _generate_config_description(self, relative_path: Path, is_quantized: bool = False, is_distilled: bool = False) -> str:
+    def _generate_config_description(
+        self,
+        relative_path: Path,
+        is_quantized: bool = False,
+        is_distilled: bool = False,
+    ) -> str:
         """Generate human-readable description for config."""
         parts = relative_path.parts
         model_type = parts[0] if not is_quantized else parts[1]
@@ -245,13 +251,58 @@ class ConfigManager:
 
     # 用户可配置的参数（在ComfyUI中显示）
     USER_CONFIGURABLE_PARAMS = {
-        "steps": {"type": "INT", "default": 20, "min": 1, "max": 200, "tooltip": "推理步数 (-1使用默认值)"},
-        "cfg_scale": {"type": "FLOAT", "default": 7, "min": 0.1, "max": 30, "step": 0.1, "tooltip": "CFG引导强度 (-1使用默认值)"},
-        "seed": {"type": "INT", "default": 42, "min": -1, "max": 2**32 - 1, "tooltip": "随机种子 (-1随机)"},
-        "height": {"type": "INT", "default": 640, "min": 64, "max": 2048, "step": 8, "tooltip": "视频高度 (-1使用默认值)"},
-        "width": {"type": "INT", "default": 640, "min": 64, "max": 2048, "step": 8, "tooltip": "视频宽度 (-1使用默认值)"},
-        "video_length": {"type": "INT", "default": 1, "min": 1, "max": 300, "tooltip": "视频帧数 (-1使用默认值)"},
-        "sample_shift": {"type": "INT", "default": 5, "min": 0, "max": 20, "tooltip": "采样偏移 (-1使用默认值)"},
+        "steps": {
+            "type": "INT",
+            "default": 20,
+            "min": 1,
+            "max": 200,
+            "tooltip": "推理步数 (-1使用默认值)",
+        },
+        "cfg_scale": {
+            "type": "FLOAT",
+            "default": 7,
+            "min": 0.1,
+            "max": 30,
+            "step": 0.1,
+            "tooltip": "CFG引导强度 (-1使用默认值)",
+        },
+        "seed": {
+            "type": "INT",
+            "default": 42,
+            "min": -1,
+            "max": 2**32 - 1,
+            "tooltip": "随机种子 (-1随机)",
+        },
+        "height": {
+            "type": "INT",
+            "default": 640,
+            "min": 64,
+            "max": 2048,
+            "step": 8,
+            "tooltip": "视频高度 (-1使用默认值)",
+        },
+        "width": {
+            "type": "INT",
+            "default": 640,
+            "min": 64,
+            "max": 2048,
+            "step": 8,
+            "tooltip": "视频宽度 (-1使用默认值)",
+        },
+        "video_length": {
+            "type": "INT",
+            "default": 1,
+            "min": 1,
+            "max": 300,
+            "tooltip": "视频帧数 (-1使用默认值)",
+        },
+        "sample_shift": {
+            "type": "INT",
+            "default": 5,
+            "min": 0,
+            "max": 20,
+            "tooltip": "采样偏移 (-1使用默认值)",
+        },
     }
 
     @classmethod
@@ -299,7 +350,31 @@ class ConfigManager:
                     # Direct mapping for unknown parameters
                     config[comfy_key] = value
 
+        # 检查并加载模型路径中的config.json
+        config = cls._load_model_config(config)
+
         return EasyDict(config)
+
+    @classmethod
+    def _load_model_config(cls, config: Dict) -> Dict:
+        """Load and merge config.json from model path if it exists."""
+        model_path = config.get("model_path", "")
+        if not model_path:
+            return config
+
+        model_config_path = os.path.join(model_path, "config.json")
+        print(f"Loading model config from: {model_config_path}", flush=True)
+        if os.path.exists(model_config_path):
+            try:
+                with open(model_config_path, "r") as f:
+                    model_config = json.load(f)
+                # 合并模型配置，模型配置优先级更高
+                config.update(model_config)
+                print(f"Loaded model config from: {model_config_path}")
+            except Exception as e:
+                print(f"Failed to load model config from {model_config_path}: {e}")
+
+        return config
 
     @classmethod
     def _get_quantization_model_path(cls, model_cls: str, mm_type: str) -> str:
@@ -701,7 +776,7 @@ class LightX2VCachingConfig:
 
 
 class LightX2VInference:
-    """LightX2V inference node that accepts configuration and runs generation."""
+    """LightX2V inference node that generates images directly."""
 
     def __init__(self):
         self.bridge = LightX2VBridge()
@@ -735,8 +810,8 @@ class LightX2VInference:
             },
         }
 
-    RETURN_TYPES = ("LATENT",)
-    RETURN_NAMES = ("video",)
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
     FUNCTION = "generate"
     CATEGORY = "LightX2V/Inference"
 
@@ -749,7 +824,7 @@ class LightX2VInference:
         audio=None,
         **kwargs,
     ):
-        """Generate video using LightX2V."""
+        """Generate images using LightX2V."""
 
         # 直接使用传入的config (已经是EasyDict)
         # 添加运行时需要的参数
@@ -766,13 +841,8 @@ class LightX2VInference:
         if "ENABLE_PROFILING_DEBUG" not in os.environ:
             os.environ["ENABLE_PROFILING_DEBUG"] = "true"
 
-        # 处理输出路径
-        if not hasattr(config, "save_video_path") or config.save_video_path is None:
-            config.save_video_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
-
         # 临时文件列表，用于清理
         temp_files = []
-        temp_files.append(config.save_video_path)  # 添加输出视频到临时文件列表
 
         try:
             # 处理i2v任务的图像输入
@@ -792,20 +862,14 @@ class LightX2VInference:
                 config.audio_path = audio_path
                 temp_files.append(audio_path)
 
-            # 检查模型路径的config.json
-            model_config_path = os.path.join(config.model_path, "config.json")
-            if os.path.exists(model_config_path):
-                with open(model_config_path, "r") as f:
-                    model_config = json.load(f)
-                config.update(model_config)
-
             # 获取或创建runner
             runner = self.bridge.get_runner(config)
 
             if runner is None:
                 raise RuntimeError("Failed to initialize runner")
 
-            # 运行生成 - run_pipeline 是异步方法
+            # 运行生成 - 我们需要创建一个自定义的pipeline来获取latents
+            # 由于原始的run_pipeline方法会删除latents和generator，我们需要分步执行
             if asyncio.iscoroutinefunction(runner.run_pipeline):
                 # 在同步环境中运行异步方法
                 try:
@@ -819,23 +883,37 @@ class LightX2VInference:
                     asyncio.set_event_loop(loop)
 
                 try:
-                    result = loop.run_until_complete(runner.run_pipeline())
+                    # 分步执行pipeline，在删除latents前获取它们
+                    # 这里我们使用try/except来捕获可能的属性访问错误
+                    try:
+                        # 尝试分步执行
+                        if hasattr(runner, "run_input_encoder"):
+                            runner.inputs = loop.run_until_complete(runner.run_input_encoder())
+                        if hasattr(runner, "set_target_shape"):
+                            kwargs = runner.set_target_shape()
+                        if hasattr(runner, "run_dit"):
+                            latents, generator = loop.run_until_complete(runner.run_dit(kwargs))
+                            images = loop.run_until_complete(runner.run_vae_decoder(latents, generator))
+                            # 直接解码latents为图像
+                            return self._decode_latents_to_images(images)
+                    except (AttributeError, TypeError):
+                        raise RuntimeError("Failed to get latents from generation")
                 except Exception as e:
                     print(f"Error during pipeline execution: {e}")
                     raise
             else:
-                result = runner.run_pipeline()
-
-            # 检查结果是否已经保存到文件
-            if os.path.exists(config.save_video_path):
-                # 不要删除输出文件，从临时文件列表中移除
-                temp_files.remove(config.save_video_path)
-                return (self.converter.video_to_latent(config.save_video_path),)
-            elif result is not None and hasattr(result, "save_video_path") and os.path.exists(result.save_video_path):
-                return (self.converter.video_to_latent(result.save_video_path),)
-            else:
-                # 如果没有保存视频，抛出错误
-                raise RuntimeError("Video generation failed: no output video found")
+                try:
+                    if hasattr(runner, "run_input_encoder"):
+                        runner.inputs = runner.run_input_encoder()
+                    if hasattr(runner, "set_target_shape"):
+                        kwargs = runner.set_target_shape()
+                    if hasattr(runner, "run_dit"):
+                        latents, generator = runner.run_dit(kwargs)
+                        # 直接解码latents为图像
+                        images = runner.run_vae_decoder(latents, generator)
+                        return self._decode_latents_to_images(images)
+                except (AttributeError, TypeError):
+                    raise RuntimeError("Failed to get latents from generation")
 
         except Exception as e:
             print(f"Error in LightX2V generation: {e}")
@@ -848,6 +926,18 @@ class LightX2VInference:
                         os.unlink(temp_file)
                     except Exception:
                         pass
+
+    def _decode_latents_to_images(self, decoded_images):
+        """Decode latents to images using VAE."""
+
+        # 归一化从 [-1, 1] 到 [0, 1]
+        images = (decoded_images + 1) / 2
+
+        # 重新排列维度为ComfyUI格式 [T, H, W, C]
+        images = images.squeeze(0).permute(1, 2, 3, 0).cpu()
+        images = torch.clamp(images, 0, 1)
+
+        return (images,)
 
 
 class LightX2VDistillConfig:
