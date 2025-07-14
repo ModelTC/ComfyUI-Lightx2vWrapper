@@ -757,12 +757,22 @@ class LightX2VInference:
         config.negative_prompt = negative_prompt
         config.mode = "infer"
 
+        # 设置环境变量（从run_wan_i2v.sh中提取）
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        if "DTYPE" not in os.environ:
+            os.environ["DTYPE"] = "BF16"  # 可通过配置更改
+        if "ENABLE_GRAPH_MODE" not in os.environ:
+            os.environ["ENABLE_GRAPH_MODE"] = "false"
+        if "ENABLE_PROFILING_DEBUG" not in os.environ:
+            os.environ["ENABLE_PROFILING_DEBUG"] = "true"
+
         # 处理输出路径
         if not hasattr(config, "save_video_path") or config.save_video_path is None:
             config.save_video_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
 
         # 临时文件列表，用于清理
         temp_files = []
+        temp_files.append(config.save_video_path)  # 添加输出视频到临时文件列表
 
         try:
             # 处理i2v任务的图像输入
@@ -773,6 +783,8 @@ class LightX2VInference:
                     pil_image.save(tmp.name)
                     config.image_path = tmp.name
                     temp_files.append(tmp.name)
+            elif config.task == "i2v" and image is None:
+                raise ValueError("i2v任务需要输入图像")
 
             # 处理音频输入
             if audio is not None and "audio" in config.model_cls:
@@ -790,34 +802,52 @@ class LightX2VInference:
             # 获取或创建runner
             runner = self.bridge.get_runner(config)
 
-            assert runner is not None, "Runner is None"
+            if runner is None:
+                raise RuntimeError("Failed to initialize runner")
 
             # 运行生成 - run_pipeline 是异步方法
             if asyncio.iscoroutinefunction(runner.run_pipeline):
                 # 在同步环境中运行异步方法
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                try:
+                    # 使用现有的事件循环（如果存在）或创建新的
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
                 try:
                     result = loop.run_until_complete(runner.run_pipeline())
-                finally:
-                    loop.close()
+                except Exception as e:
+                    print(f"Error during pipeline execution: {e}")
+                    raise
             else:
                 result = runner.run_pipeline()
 
             # 检查结果是否已经保存到文件
             if os.path.exists(config.save_video_path):
+                # 不要删除输出文件，从临时文件列表中移除
+                temp_files.remove(config.save_video_path)
                 return (self.converter.video_to_latent(config.save_video_path),)
-            elif hasattr(result, "save_video_path") and os.path.exists(result.save_video_path):
+            elif result is not None and hasattr(result, "save_video_path") and os.path.exists(result.save_video_path):
                 return (self.converter.video_to_latent(result.save_video_path),)
             else:
-                # 假设张量输出
-                return (self.converter.tensor_to_latent(result),)
+                # 如果没有保存视频，抛出错误
+                raise RuntimeError("Video generation failed: no output video found")
 
+        except Exception as e:
+            print(f"Error in LightX2V generation: {e}")
+            raise
         finally:
             # 清理临时文件
             for temp_file in temp_files:
                 if os.path.exists(temp_file):
-                    os.unlink(temp_file)
+                    try:
+                        os.unlink(temp_file)
+                    except Exception:
+                        pass
 
 
 class LightX2VDistillConfig:
