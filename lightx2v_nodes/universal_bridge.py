@@ -11,9 +11,9 @@ import tempfile
 from easydict import EasyDict
 import asyncio
 
-from .config import get_available_attn_ops, get_available_quant_ops
+# from .config import get_available_attn_ops, get_available_quant_ops
 
-from ..lightx2v.lightx2v.utils.set_config import get_default_config, set_config
+from ..lightx2v.lightx2v.utils.set_config import get_default_config
 from ..lightx2v.lightx2v.infer import init_runner
 
 
@@ -171,7 +171,7 @@ class LightX2VBridge:
         """Get or create a runner for the given config."""
         # Create a simple key based on essential parameters only
         # Only model_cls and model_path are essential for runner identity
-        key = f"{config.model_cls}_{config.model_path}"
+        key = f"{config.model_cls}_{config.model_path}"  # type:ignore
 
         # If we have a different runner, clear the old one first
         if self._current_runner_key != key:
@@ -185,8 +185,6 @@ class LightX2VBridge:
         """Clear cached runner to free memory."""
         if self._current_runner is not None:
             # Clean up the runner if it has cleanup methods
-            if hasattr(self._current_runner, "cleanup"):
-                self._current_runner.cleanup()
             self._current_runner = None
             self._current_runner_key = None
             torch.cuda.empty_cache()
@@ -247,13 +245,13 @@ class ConfigManager:
 
     # 用户可配置的参数（在ComfyUI中显示）
     USER_CONFIGURABLE_PARAMS = {
-        "steps": {"type": "INT", "default": -1, "min": 1, "max": 200, "tooltip": "推理步数 (-1使用默认值)"},
-        "cfg_scale": {"type": "FLOAT", "default": -1, "min": 0.1, "max": 30, "step": 0.1, "tooltip": "CFG引导强度 (-1使用默认值)"},
-        "seed": {"type": "INT", "default": -1, "min": -1, "max": 2**32 - 1, "tooltip": "随机种子 (-1随机)"},
-        "height": {"type": "INT", "default": -1, "min": 64, "max": 2048, "step": 8, "tooltip": "视频高度 (-1使用默认值)"},
-        "width": {"type": "INT", "default": -1, "min": 64, "max": 2048, "step": 8, "tooltip": "视频宽度 (-1使用默认值)"},
-        "video_length": {"type": "INT", "default": -1, "min": 1, "max": 300, "tooltip": "视频帧数 (-1使用默认值)"},
-        "sample_shift": {"type": "INT", "default": -1, "min": 0, "max": 20, "tooltip": "采样偏移 (-1使用默认值)"},
+        "steps": {"type": "INT", "default": 20, "min": 1, "max": 200, "tooltip": "推理步数 (-1使用默认值)"},
+        "cfg_scale": {"type": "FLOAT", "default": 7, "min": 0.1, "max": 30, "step": 0.1, "tooltip": "CFG引导强度 (-1使用默认值)"},
+        "seed": {"type": "INT", "default": 42, "min": -1, "max": 2**32 - 1, "tooltip": "随机种子 (-1随机)"},
+        "height": {"type": "INT", "default": 640, "min": 64, "max": 2048, "step": 8, "tooltip": "视频高度 (-1使用默认值)"},
+        "width": {"type": "INT", "default": 640, "min": 64, "max": 2048, "step": 8, "tooltip": "视频宽度 (-1使用默认值)"},
+        "video_length": {"type": "INT", "default": 1, "min": 1, "max": 300, "tooltip": "视频帧数 (-1使用默认值)"},
+        "sample_shift": {"type": "INT", "default": 5, "min": 0, "max": 20, "tooltip": "采样偏移 (-1使用默认值)"},
     }
 
     @classmethod
@@ -556,7 +554,7 @@ class LightX2VQuantizationConfig:
         bridge = LightX2VBridge()
 
         if quantization_preset == "custom":
-            config = {
+            config: dict[str, Any] = {
                 "mm_config": {"mm_type": mm_type},
             }
             if dit_quantized_ckpt:
