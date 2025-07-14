@@ -30,7 +30,7 @@ pip install -r lightx2v/requirements.txt # Install dependencies for lightx2v
 
 确保你的模型目录结构如下：
 
-```
+```text
 your_model_dir/
 ├── config.json                                    # 模型配置文件
 ├── models_t5_umt5-xxl-enc-bf16.pth                # T5文本编码器
