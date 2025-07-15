@@ -11,6 +11,7 @@ import tempfile
 from easydict import EasyDict
 import asyncio
 import gc
+from comfy.utils import ProgressBar
 
 # from .config import get_available_attn_ops, get_available_quant_ops
 
@@ -848,36 +849,14 @@ class LightX2VInference:
                 raise RuntimeError("Failed to initialize runner")
 
             try:
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_closed():
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                total_steps = runner.config.get("infer_steps", 20)
+                progress = ProgressBar(total_steps)
 
-                from ..lightx2v.lightx2v.models.runners.async_wrapper import AsyncWrapper
+                def update_progress(current_step, total):
+                    progress.update_absolute(current_step)
 
-                async def custom_pipeline():
-                    async with AsyncWrapper(runner) as wrapper:
-                        if runner.config.get("use_prompt_enhancer", False):
-                            runner.config["prompt_enhanced"] = await wrapper.run_prompt_enhancer()
-
-                        runner.inputs = await wrapper.run_input_encoder()
-
-                        kwargs = runner.set_target_shape()
-
-                        latents, generator = await wrapper.run_dit(kwargs)
-
-                        images = await wrapper.run_vae_decoder(latents, generator)
-
-                        del latents, generator, runner.inputs
-
-                        return images
-
-                images = loop.run_until_complete(custom_pipeline())
-
+                runner.set_progress_callback(update_progress)
+                images = asyncio.run(runner.run_pipeline())
                 torch.cuda.empty_cache()
                 gc.collect()
 
