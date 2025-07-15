@@ -12,6 +12,7 @@ from easydict import EasyDict
 import asyncio
 import gc
 from comfy.utils import ProgressBar
+import logging
 
 # from .config import get_available_attn_ops, get_available_quant_ops
 
@@ -179,6 +180,8 @@ class LightX2VBridge:
         # Create a simple key based on essential parameters only
         # Only model_cls and model_path are essential for runner identity
         key = f"{config.model_cls}_{config.model_path}"  # type:ignore
+
+        logging.info(f"[lightx2v] get_runner: {key}")
 
         # If we have a different runner, clear the old one first
         if self._current_runner_key != key:
@@ -856,7 +859,7 @@ class LightX2VInference:
                     progress.update_absolute(current_step)
 
                 runner.set_progress_callback(update_progress)
-                images = asyncio.run(runner.run_pipeline())
+                images = asyncio.run(runner.run_pipeline(save_video=False))
                 torch.cuda.empty_cache()
                 gc.collect()
 
@@ -869,13 +872,13 @@ class LightX2VInference:
         except Exception as e:
             print(f"Error in LightX2V generation: {e}")
             raise
-        finally:
-            for temp_file in temp_files:
-                if os.path.exists(temp_file):
-                    try:
-                        os.unlink(temp_file)
-                    except Exception:
-                        pass
+        # finally: #TODO: refactor lightx2v input
+        #     for temp_file in temp_files:
+        #         if os.path.exists(temp_file):
+        #             try:
+        #                 os.unlink(temp_file)
+        #             except Exception:
+        #                 pass
 
     def _decode_latents_to_images(self, decoded_images):
         """Decode latents to images using VAE."""
