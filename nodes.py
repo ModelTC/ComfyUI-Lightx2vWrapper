@@ -244,6 +244,43 @@ class LightX2VLightweightVAE:
         return (config,)
 
 
+class LightX2VLoRALoader:
+    """LoRA loader node that can be chained."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "lora_path": ("STRING", {"default": "", "tooltip": "Path to the LoRA file"}),
+                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1, "tooltip": "LoRA strength"}),
+            },
+            "optional": {
+                "lora_chain": ("LORA_CHAIN", {"tooltip": "Previous LoRA chain to append to"}),
+            },
+        }
+
+    RETURN_TYPES = ("LORA_CHAIN",)
+    RETURN_NAMES = ("lora_chain",)
+    FUNCTION = "load_lora"
+    CATEGORY = "LightX2V/LoRA"
+
+    def load_lora(self, lora_path, strength, lora_chain=None):
+        """Load LoRA and chain with previous LoRAs."""
+        # Initialize or extend the LoRA chain
+        if lora_chain is None:
+            lora_chain = []
+        else:
+            # Make a copy to avoid modifying the input
+            lora_chain = lora_chain.copy()
+
+        # Add new LoRA configuration
+        if lora_path and lora_path.strip():
+            lora_config = {"path": lora_path.strip(), "strength": strength}
+            lora_chain.append(lora_config)
+
+        return (lora_chain,)
+
+
 class LightX2VModularInference:
     """Modular inference node that combines all configurations."""
 
@@ -266,6 +303,7 @@ class LightX2VModularInference:
                 "quantization_config": ("QUANT_CONFIG", {"tooltip": "Quantization configuration"}),
                 "memory_config": ("MEMORY_CONFIG", {"tooltip": "Memory optimization configuration"}),
                 "vae_config": ("VAE_CONFIG", {"tooltip": "VAE configuration"}),
+                "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
             },
         }
 
@@ -300,6 +338,7 @@ class LightX2VModularInference:
         quantization_config=None,
         memory_config=None,
         vae_config=None,
+        lora_chain=None,
         **kwargs,
     ):
         """Generate video using modular configuration."""
@@ -329,6 +368,10 @@ class LightX2VModularInference:
 
         # Build final configuration
         config = self.config_manager.build_final_config(configs)
+
+        # Add LoRA configurations if provided
+        if lora_chain:
+            config.lora_configs = lora_chain
 
         # Add prompt and negative prompt
         config.prompt = prompt
@@ -422,6 +465,7 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VQuantization": LightX2VQuantization,
     "LightX2VMemoryOptimization": LightX2VMemoryOptimization,
     "LightX2VLightweightVAE": LightX2VLightweightVAE,
+    "LightX2VLoRALoader": LightX2VLoRALoader,
     "LightX2VModularInference": LightX2VModularInference,
 }
 
@@ -431,5 +475,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VQuantization": "LightX2V Quantization",
     "LightX2VMemoryOptimization": "LightX2V Memory Optimization",
     "LightX2VLightweightVAE": "LightX2V Lightweight VAE",
+    "LightX2VLoRALoader": "LightX2V LoRA Loader",
     "LightX2VModularInference": "LightX2V Modular Inference",
 }
