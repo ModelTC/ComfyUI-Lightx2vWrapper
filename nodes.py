@@ -23,17 +23,17 @@ class LightX2VInferenceConfig:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model_cls": (["wan2.1", "hunyuan"], {"default": "wan2.1", "tooltip": "模型类型"}),
-                "model_path": ("STRING", {"default": "", "tooltip": "模型路径"}),
-                "task": (["t2v", "i2v"], {"default": "t2v", "tooltip": "任务类型：文本到视频或图像到视频"}),
-                "infer_steps": ("INT", {"default": 40, "min": 1, "max": 100, "tooltip": "推理步数"}),
-                "seed": ("INT", {"default": 42, "min": -1, "max": 2**32 - 1, "tooltip": "随机种子，-1为随机"}),
-                "cfg_scale": ("FLOAT", {"default": 5.0, "min": 1.0, "max": 10.0, "step": 0.1, "tooltip": "CFG引导强度"}),
-                "sample_shift": ("INT", {"default": 5, "min": 0, "max": 10, "tooltip": "采样偏移"}),
-                "height": ("INT", {"default": 480, "min": 64, "max": 2048, "step": 8, "tooltip": "视频高度"}),
-                "width": ("INT", {"default": 832, "min": 64, "max": 2048, "step": 8, "tooltip": "视频宽度"}),
-                "video_length": ("INT", {"default": 81, "min": 16, "max": 120, "tooltip": "视频帧数"}),
-                "fps": ("INT", {"default": 16, "min": 8, "max": 30, "tooltip": "每秒帧数"}),
+                "model_cls": (["wan2.1", "wan2.1_audio", "wan2.1_distill", "hunyuan"], {"default": "wan2.1", "tooltip": "Model type"}),
+                "model_path": ("STRING", {"default": "", "tooltip": "Model path"}),
+                "task": (["t2v", "i2v"], {"default": "t2v", "tooltip": "Task type: text-to-video or image-to-video"}),
+                "infer_steps": ("INT", {"default": 40, "min": 1, "max": 100, "tooltip": "Inference steps"}),
+                "seed": ("INT", {"default": 42, "min": -1, "max": 2**32 - 1, "tooltip": "Random seed, -1 for random"}),
+                "cfg_scale": ("FLOAT", {"default": 5.0, "min": 1.0, "max": 10.0, "step": 0.1, "tooltip": "CFG guidance strength"}),
+                "sample_shift": ("INT", {"default": 5, "min": 0, "max": 10, "tooltip": "Sample shift"}),
+                "height": ("INT", {"default": 480, "min": 64, "max": 2048, "step": 8, "tooltip": "Video height"}),
+                "width": ("INT", {"default": 832, "min": 64, "max": 2048, "step": 8, "tooltip": "Video width"}),
+                "video_length": ("INT", {"default": 81, "min": 16, "max": 120, "tooltip": "Video frame count"}),
+                "fps": ("INT", {"default": 16, "min": 8, "max": 30, "tooltip": "Model output frame rate (cannot be changed)"}),
             }
         }
 
@@ -67,12 +67,18 @@ class LightX2VTeaCache:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "enable": ("BOOLEAN", {"default": False, "tooltip": "启用TeaCache特征缓存"}),
+                "enable": ("BOOLEAN", {"default": False, "tooltip": "Enable TeaCache feature caching"}),
                 "threshold": (
                     "FLOAT",
-                    {"default": 0.26, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "缓存阈值，越低加速越多：0.1约2倍加速，0.2约3倍加速"},
+                    {
+                        "default": 0.26,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.01,
+                        "tooltip": "Cache threshold, lower values provide more speedup: 0.1 ~2x speedup, 0.2 ~3x speedup",
+                    },
                 ),
-                "cache_key_steps_only": ("BOOLEAN", {"default": False, "tooltip": "只缓存关键步骤以平衡质量和速度"}),
+                "use_ret_steps": ("BOOLEAN", {"default": False, "tooltip": "Only cache key steps to balance quality and speed"}),
             }
         }
 
@@ -81,12 +87,12 @@ class LightX2VTeaCache:
     FUNCTION = "create_config"
     CATEGORY = "LightX2V/Config"
 
-    def create_config(self, enable, threshold, cache_key_steps_only):
+    def create_config(self, enable, threshold, use_ret_steps):
         """Create TeaCache configuration."""
         config = {
             "enable": enable,
             "threshold": threshold,
-            "cache_key_steps_only": cache_key_steps_only,
+            "use_ret_steps": use_ret_steps,
         }
         return (config,)
 
@@ -110,11 +116,14 @@ class LightX2VQuantization:
 
         return {
             "required": {
-                "dit_precision": (["bf16", "int8", "fp8"], {"default": "bf16", "tooltip": "DIT模型量化精度"}),
-                "t5_precision": (["bf16", "int8", "fp8"], {"default": "bf16", "tooltip": "T5编码器量化精度"}),
-                "clip_precision": (["fp16", "int8", "fp8"], {"default": "fp16", "tooltip": "CLIP编码器量化精度"}),
-                "quant_backend": (quant_backends, {"default": quant_backends[0], "tooltip": "量化计算后端"}),
-                "sensitive_layers_precision": (["fp32", "bf16"], {"default": "fp32", "tooltip": "敏感层（归一化和嵌入层）精度"}),
+                "dit_precision": (["bf16", "int8", "fp8"], {"default": "bf16", "tooltip": "DIT model quantization precision"}),
+                "t5_precision": (["bf16", "int8", "fp8"], {"default": "bf16", "tooltip": "T5 encoder quantization precision"}),
+                "clip_precision": (["fp16", "int8", "fp8"], {"default": "fp16", "tooltip": "CLIP encoder quantization precision"}),
+                "quant_backend": (quant_backends, {"default": quant_backends[0], "tooltip": "Quantization computation backend"}),
+                "sensitive_layers_precision": (
+                    ["fp32", "bf16"],
+                    {"default": "fp32", "tooltip": "Sensitive layers (normalization and embedding) precision"},
+                ),
             }
         }
 
@@ -156,22 +165,22 @@ class LightX2VMemoryOptimization:
             "required": {
                 "optimization_level": (
                     ["none", "low", "medium", "high", "extreme"],
-                    {"default": "none", "tooltip": "内存优化级别，越高越省内存但可能影响速度"},
+                    {"default": "none", "tooltip": "Memory optimization level, higher levels save more memory but may affect speed"},
                 ),
-                "attention_type": (attn_types, {"default": attn_types[0], "tooltip": "注意力机制类型"}),
+                "attention_type": (attn_types, {"default": attn_types[0], "tooltip": "Attention mechanism type"}),
             },
             "optional": {
                 # GPU optimization
-                "enable_rotary_chunk": ("BOOLEAN", {"default": False, "tooltip": "启用旋转编码分块"}),
+                "enable_rotary_chunk": ("BOOLEAN", {"default": False, "tooltip": "Enable rotary encoding chunking"}),
                 "rotary_chunk_size": ("INT", {"default": 100, "min": 100, "max": 10000, "step": 100}),
-                "clean_cuda_cache": ("BOOLEAN", {"default": False, "tooltip": "及时清理CUDA缓存"}),
+                "clean_cuda_cache": ("BOOLEAN", {"default": False, "tooltip": "Clean CUDA cache promptly"}),
                 # CPU offloading
-                "enable_cpu_offload": ("BOOLEAN", {"default": False, "tooltip": "启用CPU卸载"}),
-                "offload_granularity": (["block", "phase"], {"default": "phase", "tooltip": "卸载粒度"}),
+                "enable_cpu_offload": ("BOOLEAN", {"default": False, "tooltip": "Enable CPU offloading"}),
+                "offload_granularity": (["block", "phase"], {"default": "phase", "tooltip": "Offload granularity"}),
                 "offload_ratio": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.1}),
                 # Module management
-                "lazy_load": ("BOOLEAN", {"default": False, "tooltip": "延迟加载模型"}),
-                "unload_after_inference": ("BOOLEAN", {"default": False, "tooltip": "推理后卸载模块"}),
+                "lazy_load": ("BOOLEAN", {"default": False, "tooltip": "Lazy load model"}),
+                "unload_after_inference": ("BOOLEAN", {"default": False, "tooltip": "Unload modules after inference"}),
             },
         }
 
@@ -216,8 +225,8 @@ class LightX2VLightweightVAE:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "use_tiny_vae": ("BOOLEAN", {"default": False, "tooltip": "使用轻量级VAE加速解码"}),
-                "use_tiling_vae": ("BOOLEAN", {"default": False, "tooltip": "使用VAE分块推理减少显存"}),
+                "use_tiny_vae": ("BOOLEAN", {"default": False, "tooltip": "Use lightweight VAE to accelerate decoding"}),
+                "use_tiling_vae": ("BOOLEAN", {"default": False, "tooltip": "Use VAE tiling inference to reduce VRAM usage"}),
             }
         }
 
@@ -247,16 +256,16 @@ class LightX2VModularInference:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "inference_config": ("INFERENCE_CONFIG", {"tooltip": "基础推理配置"}),
-                "prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "生成提示词"}),
-                "negative_prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "负面提示词"}),
+                "inference_config": ("INFERENCE_CONFIG", {"tooltip": "Basic inference configuration"}),
+                "prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "Generation prompt"}),
+                "negative_prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "Negative prompt"}),
             },
             "optional": {
-                "image": ("IMAGE", {"tooltip": "i2v任务的输入图像"}),
-                "teacache_config": ("TEACACHE_CONFIG", {"tooltip": "TeaCache配置"}),
-                "quantization_config": ("QUANT_CONFIG", {"tooltip": "量化配置"}),
-                "memory_config": ("MEMORY_CONFIG", {"tooltip": "内存优化配置"}),
-                "vae_config": ("VAE_CONFIG", {"tooltip": "VAE配置"}),
+                "image": ("IMAGE", {"tooltip": "Input image for i2v task"}),
+                "teacache_config": ("TEACACHE_CONFIG", {"tooltip": "TeaCache configuration"}),
+                "quantization_config": ("QUANT_CONFIG", {"tooltip": "Quantization configuration"}),
+                "memory_config": ("MEMORY_CONFIG", {"tooltip": "Memory optimization configuration"}),
+                "vae_config": ("VAE_CONFIG", {"tooltip": "VAE configuration"}),
             },
         }
 
@@ -417,10 +426,10 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LightX2VInferenceConfig": "LightX2V 推理配置",
-    "LightX2VTeaCache": "LightX2V TeaCache缓存",
-    "LightX2VQuantization": "LightX2V 低精度量化",
-    "LightX2VMemoryOptimization": "LightX2V 内存优化",
-    "LightX2VLightweightVAE": "LightX2V 轻量VAE",
-    "LightX2VModularInference": "LightX2V 模块化推理",
+    "LightX2VInferenceConfig": "LightX2V Inference Config",
+    "LightX2VTeaCache": "LightX2V TeaCache",
+    "LightX2VQuantization": "LightX2V Quantization",
+    "LightX2VMemoryOptimization": "LightX2V Memory Optimization",
+    "LightX2VLightweightVAE": "LightX2V Lightweight VAE",
+    "LightX2VModularInference": "LightX2V Modular Inference",
 }

@@ -107,7 +107,6 @@ class LightX2VDefaultConfig:
         "patch_size": [1, 2, 2],
         # ========== Feature Caching (TeaCache) ==========
         "feature_caching": "NoCaching",
-        "enable_teacache": False,
         "teacache_thresh": 0.26,
         "coefficients": None,  # Auto-calculated
         "use_ret_steps": False,
@@ -199,7 +198,9 @@ class CoefficientCalculator:
 
         if coeffs:
             return coeffs[0] if use_ret_steps else coeffs[1]
-        return None
+        raise ValueError(
+            f"No coefficients found for task: {task}, model_size: {model_size}, resolution: {resolution}, use_ret_steps: {use_ret_steps}"
+        )
 
 
 class ModularConfigManager:
@@ -281,21 +282,17 @@ class ModularConfigManager:
 
         if config.get("enable", False):
             updates["feature_caching"] = "Tea"
-            updates["enable_teacache"] = True
             updates["teacache_thresh"] = config.get("threshold", 0.26)
-            updates["use_ret_steps"] = config.get("cache_key_steps_only", False)
+            updates["use_ret_steps"] = config.get("use_ret_steps", False)
 
-            # Auto-calculate coefficients
             task = model_info.get("task", "t2v")
             model_size = "14b" if "14b" in model_info.get("model_cls", "") else "1.3b"
             resolution = (model_info.get("target_width", 832), model_info.get("target_height", 480))
 
             coeffs = CoefficientCalculator.get_coefficients(task, model_size, resolution, updates["use_ret_steps"])
-            if coeffs:
-                updates["coefficients"] = coeffs
+            updates["coefficients"] = coeffs
         else:
             updates["feature_caching"] = "NoCaching"
-            updates["enable_teacache"] = False
 
         return updates
 
