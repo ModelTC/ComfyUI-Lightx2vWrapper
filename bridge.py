@@ -222,7 +222,6 @@ class ModularConfigManager:
             if is_available:
                 available.append(op_name)
 
-        # Always include fallback
         if "torch_sdpa" not in available:
             available.append("torch_sdpa")
 
@@ -245,7 +244,6 @@ class ModularConfigManager:
         """Apply basic inference configuration."""
         updates = {}
 
-        # Model settings
         if "model_cls" in config:
             updates["model_cls"] = config["model_cls"]
         if "model_path" in config:
@@ -253,7 +251,6 @@ class ModularConfigManager:
         if "task" in config:
             updates["task"] = config["task"]
 
-        # Inference parameters
         if "infer_steps" in config:
             updates["infer_steps"] = config["infer_steps"]
         if "seed" in config and config["seed"] != -1:
@@ -264,7 +261,6 @@ class ModularConfigManager:
         if "sample_shift" in config:
             updates["sample_shift"] = config["sample_shift"]
 
-        # Video parameters
         if "height" in config:
             updates["target_height"] = config["height"]
         if "width" in config:
@@ -300,13 +296,11 @@ class ModularConfigManager:
         """Apply quantization configuration."""
         updates = {}
 
-        # DIT quantization
         dit_scheme = config.get("dit_precision", "bf16")
         updates["dit_quant_scheme"] = dit_scheme
         if dit_scheme != "bf16":
             updates["dit_quantized_ckpt"] = os.path.join(model_path, dit_scheme)
 
-        # T5 quantization
         t5_scheme = config.get("t5_precision", "bf16")
         updates["t5_quant_scheme"] = t5_scheme
         updates["t5_quantized"] = t5_scheme != "bf16"
@@ -314,7 +308,6 @@ class ModularConfigManager:
             t5_path = os.path.join(model_path, t5_scheme)
             updates["t5_quantized_ckpt"] = os.path.join(t5_path, f"models_t5_umt5-xxl-enc-{t5_scheme}.pth")
 
-        # CLIP quantization
         clip_scheme = config.get("clip_precision", "fp16")
         updates["clip_quant_scheme"] = clip_scheme
         updates["clip_quantized"] = clip_scheme != "fp16"
@@ -322,11 +315,9 @@ class ModularConfigManager:
             clip_path = os.path.join(model_path, clip_scheme)
             updates["clip_quantized_ckpt"] = os.path.join(clip_path, f"clip-{clip_scheme}.pth")
 
-        # Quantization backend
         quant_backend = config.get("quant_backend", "vllm")
         updates["quant_op"] = quant_backend
 
-        # Determine mm_type based on quantization settings
         if dit_scheme != "bf16":
             if quant_backend == "vllm":
                 mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Vllm"
@@ -344,7 +335,6 @@ class ModularConfigManager:
         else:
             updates["mm_config"] = {"mm_type": "Default"}
 
-        # Precision mode
         updates["precision_mode"] = config.get("sensitive_layers_precision", "fp32")
 
         return updates
@@ -408,14 +398,13 @@ class ModularConfigManager:
         """Build final configuration from module configs."""
         final_config = copy.deepcopy(self.base_config)
 
-        # Apply configurations in order
         if "inference" in configs:
             final_config.update(self.apply_inference_config(configs["inference"]))
 
         if "teacache" in configs:
             teacache_updates = self.apply_teacache_config(
                 configs["teacache"],
-                final_config,  # Pass current config for coefficient calculation
+                final_config,
             )
             final_config.update(teacache_updates)
 
@@ -431,13 +420,11 @@ class ModularConfigManager:
             model_path = final_config.get("model_path", "")
             final_config.update(self.apply_vae_config(configs["vae"], model_path))
 
-        # Load model config if exists
         model_config_path = os.path.join(final_config["model_path"], "config.json")
         if os.path.exists(model_config_path):
             try:
                 with open(model_config_path, "r") as f:
                     model_config = json.load(f)
-                # Model config has lower priority than user configs
                 for key, value in model_config.items():
                     if key not in final_config or final_config[key] is None:
                         final_config[key] = value
