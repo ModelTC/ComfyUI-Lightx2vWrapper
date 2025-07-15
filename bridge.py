@@ -269,6 +269,9 @@ class ModularConfigManager:
             updates["target_video_length"] = config["video_length"]
         if "fps" in config:
             updates["fps"] = config["fps"]
+            
+        if "denoising_step_list" in config:
+            updates["denoising_step_list"] = config["denoising_step_list"]
 
         return updates
 

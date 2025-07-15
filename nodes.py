@@ -34,7 +34,16 @@ class LightX2VInferenceConfig:
                 "width": ("INT", {"default": 832, "min": 64, "max": 2048, "step": 8, "tooltip": "Video width"}),
                 "video_length": ("INT", {"default": 81, "min": 16, "max": 120, "tooltip": "Video frame count"}),
                 "fps": ("INT", {"default": 16, "min": 8, "max": 30, "tooltip": "Model output frame rate (cannot be changed)"}),
-            }
+            },
+            "optional": {
+                "denoising_steps": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "tooltip": "Custom denoising steps for distillation models (comma-separated, e.g., '999,750,500,250'). Leave empty to use model defaults.",
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = ("INFERENCE_CONFIG",)
@@ -42,7 +51,9 @@ class LightX2VInferenceConfig:
     FUNCTION = "create_config"
     CATEGORY = "LightX2V/Config"
 
-    def create_config(self, model_cls, model_path, task, infer_steps, seed, cfg_scale, sample_shift, height, width, video_length, fps):
+    def create_config(
+        self, model_cls, model_path, task, infer_steps, seed, cfg_scale, sample_shift, height, width, video_length, fps, denoising_steps=""
+    ):
         """Create basic inference configuration."""
         config = {
             "model_cls": model_cls,
@@ -57,6 +68,15 @@ class LightX2VInferenceConfig:
             "video_length": video_length,
             "fps": fps,
         }
+
+        if denoising_steps and denoising_steps.strip():
+            try:
+                steps_list = [int(s.strip()) for s in denoising_steps.split(",")]
+                config["denoising_step_list"] = steps_list
+                config["infer_steps"] = len(steps_list)
+            except ValueError:
+                pass
+
         return (config,)
 
 
@@ -432,14 +452,25 @@ class LightX2VModularInference:
                         waveform = waveform.cpu().numpy()
 
                     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                        import scipy.io.wavfile as wavfile
+                        try:
+                            import scipy.io.wavfile as wavfile
+                        except ImportError:
+                            import wave
 
-                        if waveform.ndim == 1:
-                            wavfile.write(tmp.name, sample_rate, waveform)
+                            with wave.open(tmp.name, "wb") as wav_file:
+                                wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
+                                wav_file.setsampwidth(2)  # 16-bit
+                                wav_file.setframerate(sample_rate)
+                                if waveform.dtype != np.int16:
+                                    waveform = (waveform * 32767).astype(np.int16)
+                                wav_file.writeframes(waveform.tobytes())
                         else:
-                            if waveform.shape[0] < waveform.shape[1]:
-                                waveform = waveform.T
-                            wavfile.write(tmp.name, sample_rate, waveform)
+                            if waveform.ndim == 1:
+                                wavfile.write(tmp.name, sample_rate, waveform)
+                            else:
+                                if waveform.shape[0] < waveform.shape[1]:
+                                    waveform = waveform.T
+                                wavfile.write(tmp.name, sample_rate, waveform)
 
                         config.audio_path = tmp.name
                         temp_files.append(tmp.name)
@@ -456,17 +487,22 @@ class LightX2VModularInference:
                 self._current_runner = init_runner(config)
                 self._current_config_hash = config_hash
             else:
-                self._current_runner.config = config
+                if hasattr(self._current_runner, "config"):
+                    self._current_runner.config = config
 
-            total_steps = config.get("infer_steps", 40)
+            total_steps = getattr(config, "infer_steps", 40)
             progress = ProgressBar(total_steps)
 
             def update_progress(current_step, total):
                 progress.update_absolute(current_step)
 
-            self._current_runner.set_progress_callback(update_progress)
+            if hasattr(self._current_runner, "set_progress_callback"):
+                self._current_runner.set_progress_callback(update_progress)
 
-            images = asyncio.run(self._current_runner.run_pipeline(save_video=False))
+            if hasattr(self._current_runner, "run_pipeline"):
+                images = asyncio.run(self._current_runner.run_pipeline(save_video=False))
+            else:
+                images = self._current_runner()
 
             if getattr(config, "unload_after_inference", False):
                 del self._current_runner
