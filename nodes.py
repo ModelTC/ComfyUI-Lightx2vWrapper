@@ -1,6 +1,5 @@
 """Modular ComfyUI nodes for LightX2V without presets."""
 
-import asyncio
 import gc
 import hashlib
 import json
@@ -478,7 +477,7 @@ class LightX2VModularInference:
                 self._current_runner.set_progress_callback(update_progress)
 
             if hasattr(self._current_runner, "run_pipeline"):
-                images = asyncio.run(self._current_runner.run_pipeline(save_video=False))
+                images = self._current_runner.run_pipeline(save_video=False)
             else:
                 images = self._current_runner()
 
