@@ -377,6 +377,8 @@ class LightX2VModularInference:
             "model_path": getattr(config, "model_path", None),
             "dit_quantized": getattr(config, "dit_quantized", False),
             "t5_quantized": getattr(config, "t5_quantized", False),
+            "clip_quantized": getattr(config, "clip_quantized", False),
+            "lora_configs": getattr(config, "lora_configs", None),
             "lazy_load": getattr(config, "lazy_load", False),
         }
 
