@@ -1,4 +1,8 @@
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/) [![ComfyUI](https://img.shields.io/badge/ComfyUI-Custom%20Node-brightgreen)](https://github.com/comfyanonymous/ComfyUI) [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Models-lightx2v-yellow)](https://huggingface.co/lightx2v) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GacLove/ComfyUI-Lightx2vWrapper)
+
 # ComfyUI-Lightx2vWrapper
+
+[中文版](./README_CN.md) | English
 
 A ComfyUI custom node wrapper for LightX2V, enabling modular video generation with advanced optimization features.
 

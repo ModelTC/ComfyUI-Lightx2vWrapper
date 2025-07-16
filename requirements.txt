@@ -1,0 +1,31 @@
+# ComfyUI-Lightx2vWrapper dependencies
+# Note: lightx2v is included as a git submodule
+# Install lightx2v dependencies separately with: pip install -r lightx2v/requirements.txt
+
+# Core dependencies for the wrapper
+easydict  # For configuration management
+scipy  # For audio processing (optional)
+
+# The following dependencies should be installed via lightx2v/requirements.txt:
+# - torch>=2.0.0
+# - torchvision
+# - numpy
+# - Pillow (PIL)
+# - opencv-python
+# - imageio, imageio-ffmpeg
+# - diffusers>=0.28.0
+# - transformers>=4.40.0
+# - tokenizers>=0.15.0
+# - accelerate>=0.27.0
+# - safetensors>=0.4.0
+# - einops
+# - loguru
+# - ftfy
+
+# Optional dependencies (uncomment as needed):
+# vllm  # For vllm quantization backend
+# sgl-kernel  # For sgl quantization backend
+# qtorch  # For quantization operations
+# flash-attn>=2.0.0  # For flash attention
+# sage-attention  # For sage attention
+# xformers  # For memory efficient attention
