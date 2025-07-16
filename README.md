@@ -1,235 +1,170 @@
 # ComfyUI-Lightx2vWrapper
 
-## 介绍
+A ComfyUI custom node wrapper for LightX2V, enabling modular video generation with advanced optimization features.
 
-ComfyUI-Lightx2vWrapper 是一个用于 ComfyUI 的 [Lightx2v](https://github.com/ModelTC/lightx2v) 推理包装器，支持文本生成视频(T2V)和图像生成视频(I2V)功能。该插件基于Wan模型架构，提供高质量的视频生成能力。
+## Features
 
-## 功能特性
+- **Modular Configuration System**: Separate nodes for each aspect of video generation
+- **Text-to-Video (T2V) and Image-to-Video (I2V)**: Support for both generation modes
+- **Advanced Optimizations**:
+  - TeaCache acceleration (up to 3x speedup)
+  - Quantization support (int8, fp8)
+  - Memory optimization with CPU offloading
+  - Lightweight VAE options
+- **LoRA Support**: Chain multiple LoRA models for customization
+- **Multiple Model Support**: wan2.1, hunyuan architectures
 
-- 🎬 **文本生成视频(T2V)**: 根据文本描述生成视频
-- 🖼️ **图像生成视频(I2V)**: 基于输入图像生成动态视频  
-- 🚀 **TeaCache加速**: 支持TeaCache功能缓存优化，提升推理速度
-- 🔧 **LoRA支持**: 支持LoRA微调模型加载
-- 💾 **内存优化**: 支持CPU卸载和显存管理
-- ⚡ **多种注意力机制**: 支持flash_attn2/flash_attn3等高效注意力实现
+## Installation
 
-## 安装
+1. Clone this repository with submodules into your ComfyUI's `custom_nodes` directory:
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/gaclove/ComfyUI-Lightx2vWrapper.git
+git clone --recursive https://github.com/gaclove/ComfyUI-Lightx2vWrapper.git
+```
+
+If you already cloned without submodules, initialize them:
+
+```bash
 cd ComfyUI-Lightx2vWrapper
 git submodule update --init --recursive
-cd lightx2v
-pip install -r lightx2v/requirements.txt # Install dependencies for lightx2v
 ```
 
-## 模型准备
+2. Install dependencies:
 
-### 模型目录结构
-
-确保你的模型目录结构如下：
-
-```text
-your_model_dir/
-├── config.json                                    # 模型配置文件
-├── models_t5_umt5-xxl-enc-bf16.pth                # T5文本编码器
-├── models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth  # CLIP视觉编码器
-├── Wan2.1_VAE.pth                                 # VAE模型
-├── google/
-│   └── umt5-xxl/                                  # T5 tokenizer目录
-└── [其他模型文件]
+```bash
+cd ComfyUI-Lightx2vWrapper
+# Install lightx2v submodule dependencies
+pip install -r lightx2v/requirements.txt
+# Install ComfyUI wrapper dependencies
+pip install -r requirements.txt
 ```
 
-### 推荐模型
+3. Download models and place them in `ComfyUI/models/lightx2v/` directory
 
-- **Wan2.1-I2V-14B-480P**: 图像生成视频模型(480p分辨率)
-- **Wan2.1-I2V-14B-720P**: 图像生成视频模型(720p分辨率)
-- **Wan2.1-T2V-14B**: 文本生成视频模型
+## Node Overview
 
-## 使用方法
+### Configuration Nodes
 
-### 图像生成视频(I2V)工作流
+#### 1. LightX2V Inference Config
 
-1. **设置模型目录**
-   - 使用 `Lightx2vWanVideoModelDir` 节点设置模型路径
+Basic inference configuration for video generation.
 
-2. **加载编码器**
-   - `Lightx2vWanVideoT5EncoderLoader`: 加载T5文本编码器
-   - `Lightx2vWanVideoClipVisionEncoderLoader`: 加载CLIP视觉编码器
-   - `Lightx2vWanVideoVaeLoader`: 加载VAE编码器
+- **Inputs**: model, task_type, inference_steps, seed, cfg_scale, width, height, video_length, fps
+- **Output**: Base configuration object
 
-3. **文本编码**
-   - `Lightx2vWanVideoT5Encoder`: 编码正负提示词
+#### 2. LightX2V TeaCache
 
-4. **图像编码**
-   - `Lightx2vWanVideoImageEncoder`: 编码输入图像
+Feature caching acceleration configuration.
 
-5. **模型加载**
-   - `Lightx2vWanVideoModelLoader`: 加载主要的Wan模型
+- **Inputs**: enable, threshold (0.0-1.0), use_ret_steps
+- **Output**: TeaCache configuration
+- **Note**: Lower threshold = more speedup (0.1 ~2x, 0.2 ~3x)
 
-6. **视频生成**
-   - `Lightx2vWanVideoSampler`: 执行采样生成
+#### 3. LightX2V Quantization
 
-7. **解码输出**
-   - `Lightx2vWanVideoVaeDecoder`: 将潜在表示解码为视频帧
+Model quantization settings for memory efficiency.
 
-### 文本生成视频(T2V)工作流
+- **Inputs**: dit_precision, t5_precision, clip_precision, backend, sensitive_layers_precision
+- **Output**: Quantization configuration
+- **Backends**: Auto-detected (vllm, sgl, q8f)
 
-T2V工作流与I2V类似，但使用 `Lightx2vWanVideoEmptyEmbeds` 替代图像编码器。
+#### 4. LightX2V Memory Optimization
 
-## 节点说明
+Memory management strategies.
 
-### 核心节点
+- **Inputs**: optimization_level, attention_type, enable_rotary_chunking, cpu_offload, unload_after_generate
+- **Output**: Memory optimization configuration
 
-#### Lightx2vWanVideoModelDir
+#### 5. LightX2V Lightweight VAE
 
-- **功能**: 设置模型目录路径
-- **输入**:
-  - `model_dir`: 模型目录路径
+VAE optimization options.
 
-#### Lightx2vWanVideoT5EncoderLoader  
+- **Inputs**: use_tiny_vae, use_tiling_vae
+- **Output**: VAE configuration
 
-- **功能**: 加载T5文本编码器
-- **输入**:
-  - `model_name`: T5模型文件名
-  - `precision`: 精度(bf16/fp16/fp32)
-  - `device`: 设备(cuda/cpu)
+#### 6. LightX2V LoRA Loader
 
-#### Lightx2vWanVideoT5Encoder
+Load and chain LoRA models.
 
-- **功能**: 编码文本提示词
-- **输入**:
-  - `t5_encoder`: T5编码器实例
-  - `prompt`: 正面提示词
-  - `negative_prompt`: 负面提示词
+- **Inputs**: lora_name, strength (0.0-2.0), lora_chain (optional)
+- **Output**: LoRA chain configuration
 
-#### Lightx2vWanVideoVaeLoader
+### Combination Node
 
-- **功能**: 加载VAE模型
-- **输入**:
-  - `model_name`: VAE模型文件名
-  - `precision`: 精度设置
-  - `device`: 设备选择
-  - `parallel`: 是否并行处理
+#### 7. LightX2V Config Combiner
 
-#### Lightx2vWanVideoImageEncoder
+Combines all configuration modules into a single configuration.
 
-- **功能**: 编码输入图像用于I2V生成
-- **输入**:
-  - `vae`: VAE模型实例
-  - `clip_vision_encoder`: CLIP视觉编码器
-  - `image`: 输入图像
-  - `width/height`: 目标分辨率
-  - `num_frames`: 生成帧数
+- **Inputs**: All configuration types (optional)
+- **Output**: Combined configuration object
 
-#### Lightx2vWanVideoModelLoader
+### Inference Node
 
-- **功能**: 加载主要的Wan生成模型
-- **输入**:
-  - `model_type`: 模型类型(t2v/i2v)
-  - `precision`: 精度设置
-  - `attention_type`: 注意力机制类型
-  - `cpu_offload`: 是否CPU卸载
-  - `lora_path`: LoRA模型路径(可选)
-  - `teacache_args`: TeaCache参数(可选)
+#### 8. LightX2V Modular Inference
 
-#### Lightx2vWanVideoSampler
+Main inference node for video generation.
 
-- **功能**: 执行视频生成采样
-- **输入**:
-  - `model`: Wan模型实例
-  - `text_embeddings`: 文本嵌入
-  - `image_embeddings`: 图像嵌入
-  - `steps`: 采样步数
-  - `cfg_scale`: CFG引导强度
-  - `seed`: 随机种子
+- **Inputs**: combined_config, prompt, negative_prompt, image (optional), audio (optional)
+- **Outputs**: Generated video frames
 
-#### Lightx2vWanVideoVaeDecoder
+## Usage Examples
 
-- **功能**: 解码潜在表示为视频帧
-- **输入**:
-  - `wan_vae`: VAE模型实例
-  - `latent`: 潜在表示
+### Basic T2V Workflow
 
-### 优化节点
+1. Create LightX2V Inference Config (task_type: "t2v")
+2. Use LightX2V Config Combiner
+3. Connect to LightX2V Modular Inference with text prompt
+4. Save video output
 
-#### Lightx2vTeaCache
+### I2V with Optimizations
 
-- **功能**: TeaCache加速配置
-- **输入**:
-  - `rel_l1_thresh`: 缓存阈值
-  - `start_percent/end_percent`: 缓存使用范围
-  - `coefficients`: 预设系数
-  - `cache_device`: 缓存设备
+1. Load input image
+2. Create LightX2V Inference Config (task_type: "i2v")
+3. Add LightX2V TeaCache (threshold: 0.26)
+4. Add LightX2V Memory Optimization
+5. Combine configs with LightX2V Config Combiner
+6. Run LightX2V Modular Inference
 
-#### Lightx2vWanVideoEmptyEmbeds
+### With LoRA
 
-- **功能**: 为T2V任务提供空图像嵌入
-- **输入**:
-  - `width/height`: 目标分辨率
-  - `num_frames`: 生成帧数
+1. Create base configuration
+2. Load LoRA with LightX2V LoRA Loader
+3. Chain multiple LoRAs if needed
+4. Combine all configs
+5. Run inference
 
-## 参数说明
+## Model Directory Structure
 
-### 分辨率设置
+Download models from: <https://huggingface.co/lightx2v>
 
-- **480P**: width=832, height=480
-- **720P**: width=1280, height=720
-- 确保宽高为8的倍数
+Models should be placed in:
 
-### 帧数设置
+```txt
+ComfyUI/models/lightx2v/
+├── Wan2.1-I2V-14B-720P-xxx/     # Main model checkpoints
+├── Wan2.1-I2V-14B-480P-xxx/     # Main model checkpoints
+├── loras/          # LoRA models
+```
 
-- 推荐帧数: 81帧 (约5秒 @ 16fps)
-- 帧数应为4的倍数+1 (如: 81, 85, 89等)
+## Tips
 
-### 精度选择
+- Start with default settings and adjust based on your hardware
+- Use TeaCache with threshold 0.1-0.2 for significant speedup
+- Enable memory optimization if running on limited VRAM
+- Quantization can reduce memory usage but may affect quality
+- Chain multiple LoRAs for complex style combinations
 
-- **bf16**: 推荐用于主模型，平衡精度和性能
-- **fp16**: 适用于VAE和CLIP，节省显存
-- **fp32**: 最高精度，显存占用大
+## Troubleshooting
 
-### CFG引导
+- **Out of Memory**: Enable memory optimization or use quantization
+- **Slow Generation**: Enable TeaCache or reduce inference steps
+- **Model Not Found**: Check model paths in `ComfyUI/models/lightx2v/`
 
-- **CFG Scale**: 1.0-20.0，值越高越遵循提示词
-- **推荐值**: 5.0-8.0
+## Example Workflows
 
-## 示例工作流
+Example workflow JSON files are provided in the `examples/` directory:
 
-参考 `examples/i2v_workflow.json` 获取完整的I2V工作流配置。
-
-## 性能优化建议
-
-1. **启用TeaCache**: 使用 `Lightx2vTeaCache` 节点加速推理
-2. **CPU卸载**: 显存不足时启用 `cpu_offload`
-3. **合适精度**: 根据显存情况选择bf16或fp16
-4. **批处理**: 多个视频生成时考虑批处理
-
-## 故障排除
-
-### 常见问题
-
-1. **模型文件缺失**: 确保所有必需的模型文件都在正确位置
-2. **显存不足**: 降低精度或启用CPU卸载
-3. **分辨率错误**: 确保宽高为8的倍数
-4. **帧数错误**: 使用4的倍数+1的帧数
-
-### 调试技巧
-
-- 检查模型目录结构是否正确
-- 验证config.json文件格式
-- 监控GPU显存使用情况
-- 查看ComfyUI控制台错误信息
-
-## 更新日志
-
-- 支持Wan2.1模型架构
-- 集成TeaCache加速功能  
-- 添加LoRA微调支持
-- 优化内存管理和性能
-
-## 参考资料
-
-- [Develop Custom Nodes](https://docs.comfy.org/custom-nodes/walkthrough)
-- [一份ComfyUI 自定义节点指南](https://developer.volcengine.com/articles/7399549896778317833)
-- [Lightx2v](https://github.com/ModelTC/lightx2v)
+- `wan_i2v.json` - Basic image-to-video
+- `wan_i2v_with_distill_lora.json` - I2V with distillation LoRA
+- `wan_t2v_with_distill_lora.json` - T2V with distillation LoRA
