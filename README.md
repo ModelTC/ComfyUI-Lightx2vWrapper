@@ -172,3 +172,31 @@ Example workflow JSON files are provided in the `examples/` directory:
 - `wan_i2v.json` - Basic image-to-video
 - `wan_i2v_with_distill_lora.json` - I2V with distillation LoRA
 - `wan_t2v_with_distill_lora.json` - T2V with distillation LoRA
+
+## Contributing Guidelines
+
+We welcome community contributions! Before submitting code, please ensure you follow these steps:
+
+### Install Development Dependencies
+
+```bash
+pip install ruff pre-commit
+```
+
+### Code Quality Check
+
+Before committing code, run the following command:
+
+```bash
+pre-commit run --all-files
+```
+
+This will automatically check code formatting, syntax errors, and other code quality issues.
+
+### Contribution Process
+
+1. Fork this repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Create a Pull Request

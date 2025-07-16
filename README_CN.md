@@ -172,3 +172,31 @@ ComfyUI/models/lightx2v/
 - `wan_i2v.json` - 基础图像生成视频
 - `wan_i2v_with_distill_lora.json` - 带蒸馏 LoRA 的 I2V
 - `wan_t2v_with_distill_lora.json` - 带蒸馏 LoRA 的 T2V
+
+## 贡献指南
+
+我们欢迎社区贡献！在提交代码之前，请确保遵循以下步骤：
+
+### 安装开发依赖
+
+```bash
+pip install ruff pre-commit
+```
+
+### 代码质量检查
+
+在提交代码之前，请运行以下命令：
+
+```bash
+pre-commit run --all-files
+```
+
+这将自动检查代码格式、语法错误和其他代码质量问题。
+
+### 贡献流程
+
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 创建 Pull Request
