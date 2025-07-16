@@ -3,9 +3,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "v*"
-    paths:
-      - "pyproject.toml"
+      - "v*.*.*"
 
 permissions:
   issues: write
@@ -20,22 +18,6 @@ jobs:
         with:
           submodules: true
 
-      - name: Extract version from tag
-        id: get_version
-        run: |
-          echo "TAG_VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
-
-      - name: Update pyproject.toml version (not committed)
-        run: |
-          echo "Current pyproject.toml content:"
-          cat pyproject.toml
-          echo "TAG_VERSION: ${TAG_VERSION}"
-
-          # 更可靠的 sed 命令
-          sed -i "s/version = \"[^\"]*\"/version = \"${TAG_VERSION}\"/" pyproject.toml
-
-          echo "Updated pyproject.toml content:"
-          cat pyproject.toml
       - name: Publish Custom Node
         uses: Comfy-Org/publish-node-action@v1
         with:
