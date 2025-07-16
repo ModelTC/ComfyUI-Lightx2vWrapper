@@ -27,8 +27,15 @@ jobs:
 
       - name: Update pyproject.toml version (not committed)
         run: |
-          sed -i "s/^version = \".*\"/version = \"${TAG_VERSION}\"/" pyproject.toml
+          echo "Current pyproject.toml content:"
+          cat pyproject.toml
+          echo "TAG_VERSION: ${TAG_VERSION}"
 
+          # 更可靠的 sed 命令
+          sed -i "s/version = \"[^\"]*\"/version = \"${TAG_VERSION}\"/" pyproject.toml
+
+          echo "Updated pyproject.toml content:"
+          cat pyproject.toml
       - name: Publish Custom Node
         uses: Comfy-Org/publish-node-action@v1
         with:
