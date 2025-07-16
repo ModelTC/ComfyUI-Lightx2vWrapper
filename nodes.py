@@ -12,9 +12,18 @@ import torch
 from comfy.utils import ProgressBar
 from PIL import Image
 
-from .bridge import ModularConfigManager, get_available_attn_ops, get_available_quant_ops
+from .bridge import (
+    ModularConfigManager,
+    get_available_attn_ops,
+    get_available_quant_ops,
+)
 from .lightx2v.lightx2v.infer import init_runner
-from .model_utils import get_lora_full_path, get_model_full_path, scan_loras, scan_models
+from .model_utils import (
+    get_lora_full_path,
+    get_model_full_path,
+    scan_loras,
+    scan_models,
+)
 
 
 class LightX2VInferenceConfig:
@@ -24,17 +33,89 @@ class LightX2VInferenceConfig:
 
         return {
             "required": {
-                "model_cls": (["wan2.1", "wan2.1_audio", "wan2.1_distill", "hunyuan"], {"default": "wan2.1", "tooltip": "Model type"}),
-                "model_name": (available_models, {"default": available_models[0], "tooltip": "Select model from available models"}),
-                "task": (["t2v", "i2v"], {"default": "t2v", "tooltip": "Task type: text-to-video or image-to-video"}),
-                "infer_steps": ("INT", {"default": 40, "min": 1, "max": 100, "tooltip": "Inference steps"}),
-                "seed": ("INT", {"default": 42, "min": -1, "max": 2**32 - 1, "tooltip": "Random seed, -1 for random"}),
-                "cfg_scale": ("FLOAT", {"default": 5.0, "min": 1.0, "max": 10.0, "step": 0.1, "tooltip": "CFG guidance strength"}),
-                "sample_shift": ("INT", {"default": 5, "min": 0, "max": 10, "tooltip": "Sample shift"}),
-                "height": ("INT", {"default": 480, "min": 64, "max": 2048, "step": 8, "tooltip": "Video height"}),
-                "width": ("INT", {"default": 832, "min": 64, "max": 2048, "step": 8, "tooltip": "Video width"}),
-                "video_length": ("INT", {"default": 81, "min": 16, "max": 120, "tooltip": "Video frame count"}),
-                "fps": ("INT", {"default": 16, "min": 8, "max": 30, "tooltip": "Model output frame rate (cannot be changed)"}),
+                "model_cls": (
+                    ["wan2.1", "wan2.1_audio", "wan2.1_distill", "hunyuan"],
+                    {"default": "wan2.1", "tooltip": "Model type"},
+                ),
+                "model_name": (
+                    available_models,
+                    {
+                        "default": available_models[0],
+                        "tooltip": "Select model from available models",
+                    },
+                ),
+                "task": (
+                    ["t2v", "i2v"],
+                    {
+                        "default": "t2v",
+                        "tooltip": "Task type: text-to-video or image-to-video",
+                    },
+                ),
+                "infer_steps": (
+                    "INT",
+                    {"default": 40, "min": 1, "max": 100, "tooltip": "Inference steps"},
+                ),
+                "seed": (
+                    "INT",
+                    {
+                        "default": 42,
+                        "min": -1,
+                        "max": 2**32 - 1,
+                        "tooltip": "Random seed, -1 for random",
+                    },
+                ),
+                "cfg_scale": (
+                    "FLOAT",
+                    {
+                        "default": 5.0,
+                        "min": 1.0,
+                        "max": 10.0,
+                        "step": 0.1,
+                        "tooltip": "CFG guidance strength",
+                    },
+                ),
+                "sample_shift": (
+                    "INT",
+                    {"default": 5, "min": 0, "max": 10, "tooltip": "Sample shift"},
+                ),
+                "height": (
+                    "INT",
+                    {
+                        "default": 480,
+                        "min": 64,
+                        "max": 2048,
+                        "step": 8,
+                        "tooltip": "Video height",
+                    },
+                ),
+                "width": (
+                    "INT",
+                    {
+                        "default": 832,
+                        "min": 64,
+                        "max": 2048,
+                        "step": 8,
+                        "tooltip": "Video width",
+                    },
+                ),
+                "video_length": (
+                    "INT",
+                    {
+                        "default": 81,
+                        "min": 16,
+                        "max": 120,
+                        "tooltip": "Video frame count",
+                    },
+                ),
+                "fps": (
+                    "INT",
+                    {
+                        "default": 16,
+                        "min": 8,
+                        "max": 30,
+                        "tooltip": "Model output frame rate (cannot be changed)",
+                    },
+                ),
             },
             "optional": {
                 "denoising_steps": (
@@ -53,7 +134,19 @@ class LightX2VInferenceConfig:
     CATEGORY = "LightX2V/Config"
 
     def create_config(
-        self, model_cls, model_name, task, infer_steps, seed, cfg_scale, sample_shift, height, width, video_length, fps, denoising_steps=""
+        self,
+        model_cls,
+        model_name,
+        task,
+        infer_steps,
+        seed,
+        cfg_scale,
+        sample_shift,
+        height,
+        width,
+        video_length,
+        fps,
+        denoising_steps="",
     ):
         """Create basic inference configuration."""
         model_path = get_model_full_path(model_name)
@@ -90,7 +183,10 @@ class LightX2VTeaCache:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "enable": ("BOOLEAN", {"default": False, "tooltip": "Enable TeaCache feature caching"}),
+                "enable": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Enable TeaCache feature caching"},
+                ),
                 "threshold": (
                     "FLOAT",
                     {
@@ -101,7 +197,13 @@ class LightX2VTeaCache:
                         "tooltip": "Cache threshold, lower values provide more speedup: 0.1 ~2x speedup, 0.2 ~3x speedup",
                     },
                 ),
-                "use_ret_steps": ("BOOLEAN", {"default": False, "tooltip": "Only cache key steps to balance quality and speed"}),
+                "use_ret_steps": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Only cache key steps to balance quality and speed",
+                    },
+                ),
             }
         }
 
@@ -135,13 +237,34 @@ class LightX2VQuantization:
 
         return {
             "required": {
-                "dit_precision": (["bf16", "int8", "fp8"], {"default": "bf16", "tooltip": "DIT model quantization precision"}),
-                "t5_precision": (["bf16", "int8", "fp8"], {"default": "bf16", "tooltip": "T5 encoder quantization precision"}),
-                "clip_precision": (["fp16", "int8", "fp8"], {"default": "fp16", "tooltip": "CLIP encoder quantization precision"}),
-                "quant_backend": (quant_backends, {"default": quant_backends[0], "tooltip": "Quantization computation backend"}),
+                "dit_precision": (
+                    ["bf16", "int8", "fp8"],
+                    {"default": "bf16", "tooltip": "DIT model quantization precision"},
+                ),
+                "t5_precision": (
+                    ["bf16", "int8", "fp8"],
+                    {"default": "bf16", "tooltip": "T5 encoder quantization precision"},
+                ),
+                "clip_precision": (
+                    ["fp16", "int8", "fp8"],
+                    {
+                        "default": "fp16",
+                        "tooltip": "CLIP encoder quantization precision",
+                    },
+                ),
+                "quant_backend": (
+                    quant_backends,
+                    {
+                        "default": quant_backends[0],
+                        "tooltip": "Quantization computation backend",
+                    },
+                ),
                 "sensitive_layers_precision": (
                     ["fp32", "bf16"],
-                    {"default": "fp32", "tooltip": "Sensitive layers (normalization and embedding) precision"},
+                    {
+                        "default": "fp32",
+                        "tooltip": "Sensitive layers (normalization and embedding) precision",
+                    },
                 ),
             }
         }
@@ -151,7 +274,14 @@ class LightX2VQuantization:
     FUNCTION = "create_config"
     CATEGORY = "LightX2V/Config"
 
-    def create_config(self, dit_precision, t5_precision, clip_precision, quant_backend, sensitive_layers_precision):
+    def create_config(
+        self,
+        dit_precision,
+        t5_precision,
+        clip_precision,
+        quant_backend,
+        sensitive_layers_precision,
+    ):
         """Create quantization configuration."""
         config = {
             "dit_precision": dit_precision,
@@ -182,22 +312,52 @@ class LightX2VMemoryOptimization:
             "required": {
                 "optimization_level": (
                     ["none", "low", "medium", "high", "extreme"],
-                    {"default": "none", "tooltip": "Memory optimization level, higher levels save more memory but may affect speed"},
+                    {
+                        "default": "none",
+                        "tooltip": "Memory optimization level, higher levels save more memory but may affect speed",
+                    },
                 ),
-                "attention_type": (attn_types, {"default": attn_types[0], "tooltip": "Attention mechanism type"}),
+                "attention_type": (
+                    attn_types,
+                    {"default": attn_types[0], "tooltip": "Attention mechanism type"},
+                ),
             },
             "optional": {
                 # GPU optimization
-                "enable_rotary_chunk": ("BOOLEAN", {"default": False, "tooltip": "Enable rotary encoding chunking"}),
-                "rotary_chunk_size": ("INT", {"default": 100, "min": 100, "max": 10000, "step": 100}),
-                "clean_cuda_cache": ("BOOLEAN", {"default": False, "tooltip": "Clean CUDA cache promptly"}),
+                "enable_rotary_chunk": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Enable rotary encoding chunking"},
+                ),
+                "rotary_chunk_size": (
+                    "INT",
+                    {"default": 100, "min": 100, "max": 10000, "step": 100},
+                ),
+                "clean_cuda_cache": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Clean CUDA cache promptly"},
+                ),
                 # CPU offloading
-                "enable_cpu_offload": ("BOOLEAN", {"default": False, "tooltip": "Enable CPU offloading"}),
-                "offload_granularity": (["block", "phase"], {"default": "phase", "tooltip": "Offload granularity"}),
-                "offload_ratio": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.1}),
+                "enable_cpu_offload": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Enable CPU offloading"},
+                ),
+                "offload_granularity": (
+                    ["block", "phase"],
+                    {"default": "phase", "tooltip": "Offload granularity"},
+                ),
+                "offload_ratio": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.1},
+                ),
                 # Module management
-                "lazy_load": ("BOOLEAN", {"default": False, "tooltip": "Lazy load model"}),
-                "unload_after_inference": ("BOOLEAN", {"default": False, "tooltip": "Unload modules after inference"}),
+                "lazy_load": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Lazy load model"},
+                ),
+                "unload_after_inference": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Unload modules after inference"},
+                ),
             },
         }
 
@@ -239,8 +399,20 @@ class LightX2VLightweightVAE:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "use_tiny_vae": ("BOOLEAN", {"default": False, "tooltip": "Use lightweight VAE to accelerate decoding"}),
-                "use_tiling_vae": ("BOOLEAN", {"default": False, "tooltip": "Use VAE tiling inference to reduce VRAM usage"}),
+                "use_tiny_vae": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Use lightweight VAE to accelerate decoding",
+                    },
+                ),
+                "use_tiling_vae": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Use VAE tiling inference to reduce VRAM usage",
+                    },
+                ),
             }
         }
 
@@ -264,11 +436,29 @@ class LightX2VLoRALoader:
 
         return {
             "required": {
-                "lora_name": (available_loras, {"default": available_loras[0], "tooltip": "Select LoRA from available LoRAs"}),
-                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1, "tooltip": "LoRA strength"}),
+                "lora_name": (
+                    available_loras,
+                    {
+                        "default": available_loras[0],
+                        "tooltip": "Select LoRA from available LoRAs",
+                    },
+                ),
+                "strength": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": 0.0,
+                        "max": 2.0,
+                        "step": 0.1,
+                        "tooltip": "LoRA strength",
+                    },
+                ),
             },
             "optional": {
-                "lora_chain": ("LORA_CHAIN", {"tooltip": "Previous LoRA chain to append to"}),
+                "lora_chain": (
+                    "LORA_CHAIN",
+                    {"tooltip": "Previous LoRA chain to append to"},
+                ),
             },
         }
 
@@ -300,12 +490,24 @@ class LightX2VConfigCombiner:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "inference_config": ("INFERENCE_CONFIG", {"tooltip": "Basic inference configuration"}),
+                "inference_config": (
+                    "INFERENCE_CONFIG",
+                    {"tooltip": "Basic inference configuration"},
+                ),
             },
             "optional": {
-                "teacache_config": ("TEACACHE_CONFIG", {"tooltip": "TeaCache configuration"}),
-                "quantization_config": ("QUANT_CONFIG", {"tooltip": "Quantization configuration"}),
-                "memory_config": ("MEMORY_CONFIG", {"tooltip": "Memory optimization configuration"}),
+                "teacache_config": (
+                    "TEACACHE_CONFIG",
+                    {"tooltip": "TeaCache configuration"},
+                ),
+                "quantization_config": (
+                    "QUANT_CONFIG",
+                    {"tooltip": "Quantization configuration"},
+                ),
+                "memory_config": (
+                    "MEMORY_CONFIG",
+                    {"tooltip": "Memory optimization configuration"},
+                ),
                 "vae_config": ("VAE_CONFIG", {"tooltip": "VAE configuration"}),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
             },
@@ -355,13 +557,25 @@ class LightX2VModularInference:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "combined_config": ("COMBINED_CONFIG", {"tooltip": "Combined configuration from config combiner"}),
-                "prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "Generation prompt"}),
-                "negative_prompt": ("STRING", {"multiline": True, "default": "", "tooltip": "Negative prompt"}),
+                "combined_config": (
+                    "COMBINED_CONFIG",
+                    {"tooltip": "Combined configuration from config combiner"},
+                ),
+                "prompt": (
+                    "STRING",
+                    {"multiline": True, "default": "", "tooltip": "Generation prompt"},
+                ),
+                "negative_prompt": (
+                    "STRING",
+                    {"multiline": True, "default": "", "tooltip": "Negative prompt"},
+                ),
             },
             "optional": {
                 "image": ("IMAGE", {"tooltip": "Input image for i2v task"}),
-                "audio": ("AUDIO", {"tooltip": "Input audio for audio-driven generation"}),
+                "audio": (
+                    "AUDIO",
+                    {"tooltip": "Input audio for audio-driven generation"},
+                ),
             },
         }
 
@@ -421,21 +635,29 @@ class LightX2VModularInference:
                     config.image_path = tmp.name
                     temp_files.append(tmp.name)
 
-            if audio is not None and hasattr(config, "model_cls") and "audio" in config.model_cls:
+            if (
+                audio is not None
+                and hasattr(config, "model_cls")
+                and "audio" in config.model_cls
+            ):
                 if isinstance(audio, tuple) and len(audio) == 2:
                     waveform, sample_rate = audio
 
                     if isinstance(waveform, torch.Tensor):
                         waveform = waveform.cpu().numpy()
 
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".wav", delete=False
+                    ) as tmp:
                         try:
                             import scipy.io.wavfile as wavfile
                         except ImportError:
                             import wave
 
                             with wave.open(tmp.name, "wb") as wav_file:
-                                wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
+                                wav_file.setnchannels(
+                                    1 if waveform.ndim == 1 else waveform.shape[-1]
+                                )
                                 wav_file.setsampwidth(2)  # 16-bit
                                 wav_file.setframerate(sample_rate)
                                 if waveform.dtype != np.int16:
@@ -453,7 +675,11 @@ class LightX2VModularInference:
                         temp_files.append(tmp.name)
 
             config_hash = self._get_config_hash(config)
-            needs_reinit = self._current_runner is None or self._current_config_hash != config_hash or getattr(config, "lazy_load", False)
+            needs_reinit = (
+                self._current_runner is None
+                or self._current_config_hash != config_hash
+                or getattr(config, "lazy_load", False)
+            )
 
             if needs_reinit:
                 if self._current_runner is not None:
