@@ -28,7 +28,7 @@ def is_module_installed(module_name):
 
 
 def get_available_quant_ops():
-    available_ops = []
+    available_ops = [("torchao", True)]
 
     vllm_installed = is_module_installed("vllm")
     if vllm_installed:
@@ -393,6 +393,10 @@ class ModularConfigManager:
             elif quant_backend == "q8f":
                 mm_type = (
                     f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Q8F"
+                )
+            elif quant_backend == "torchao":
+                mm_type = (
+                    f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Torchao"
                 )
             else:
                 mm_type = "Default"
