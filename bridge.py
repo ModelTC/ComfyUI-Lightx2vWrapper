@@ -28,7 +28,7 @@ def is_module_installed(module_name):
 
 
 def get_available_quant_ops():
-    available_ops = [("torchao", True)]
+    available_ops = []
 
     vllm_installed = is_module_installed("vllm")
     if vllm_installed:
@@ -47,6 +47,12 @@ def get_available_quant_ops():
         available_ops.append(("q8f", True))
     else:
         available_ops.append(("q8f", False))
+
+    torchao_installed = is_module_installed("torchao")
+    if torchao_installed:
+        available_ops.append(("torchao", True))
+    else:
+        available_ops.append(("torchao", False))
 
     return available_ops
 
