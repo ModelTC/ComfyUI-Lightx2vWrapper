@@ -394,10 +394,14 @@ class ModularConfigManager:
                 mm_type = (
                     f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Q8F"
                 )
+                updates["t5_quant_scheme"] = "int8-q8f"
+                updates["clip_quant_scheme"] = "int8-q8f"
             elif quant_backend == "torchao":
                 mm_type = (
                     f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Torchao"
                 )
+                updates["t5_quant_scheme"] = "int8-torchao"
+                updates["clip_quant_scheme"] = "int8-torchao"
             else:
                 mm_type = "Default"
 
