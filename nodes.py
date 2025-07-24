@@ -757,13 +757,13 @@ class LightX2VModularInference:
             logging.error(f"Error during inference: {e}")
             raise
 
-        # finally:
-        #     for temp_file in temp_files:
-        #         if os.path.exists(temp_file):
-        #             try:
-        #                 os.unlink(temp_file)
-        #             except Exception:
-        #                 pass
+        finally:
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    try:
+                        os.unlink(temp_file)
+                    except Exception:
+                        pass
 
 
 NODE_CLASS_MAPPINGS = {
