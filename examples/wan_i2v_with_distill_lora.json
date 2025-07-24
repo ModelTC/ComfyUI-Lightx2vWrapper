@@ -7,8 +7,14 @@
     {
       "id": 109,
       "type": "LightX2VConfigCombiner",
-      "pos": [1531.4547119140625, -521.6442260742188],
-      "size": [239.138671875, 126],
+      "pos": [
+        1531.4547119140625,
+        -521.6442260742188
+      ],
+      "size": [
+        239.138671875,
+        126
+      ],
       "flags": {},
       "order": 3,
       "mode": 0,
@@ -53,7 +59,10 @@
         {
           "name": "combined_config",
           "type": "COMBINED_CONFIG",
-          "links": [78, 80]
+          "links": [
+            78,
+            80
+          ]
         }
       ],
       "properties": {
@@ -64,8 +73,14 @@
     {
       "id": 111,
       "type": "easy showAnything",
-      "pos": [1839.9300537109375, -494.4144287109375],
-      "size": [624.5454711914062, 358.7272644042969],
+      "pos": [
+        1839.9300537109375,
+        -494.4144287109375
+      ],
+      "size": [
+        624.5454711914062,
+        358.7272644042969
+      ],
       "flags": {
         "collapsed": true
       },
@@ -94,47 +109,18 @@
       ]
     },
     {
-      "id": 105,
-      "type": "LightX2VInferenceConfig",
-      "pos": [1073.62646484375, -580.9854125976562],
-      "size": [270, 346],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "inference_config",
-          "type": "INFERENCE_CONFIG",
-          "links": [76]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LightX2VInferenceConfig"
-      },
-      "widgets_values": [
-        "wan2.1",
-        "Wan2.1-I2V-14B-480P",
-        "i2v",
-        4,
-        1822974886,
-        "fixed",
-        1,
-        8,
-        480,
-        480,
-        81,
-        16,
-        "999, 750, 500, 250"
-      ]
-    },
-    {
       "id": 112,
       "type": "LightX2VLoRALoader",
-      "pos": [1083.3714599609375, -178.75082397460938],
-      "size": [270, 82],
+      "pos": [
+        1083.3714599609375,
+        -178.75082397460938
+      ],
+      "size": [
+        270,
+        82
+      ],
       "flags": {},
-      "order": 1,
+      "order": 0,
       "mode": 0,
       "inputs": [
         {
@@ -148,7 +134,9 @@
         {
           "name": "lora_chain",
           "type": "LORA_CHAIN",
-          "links": [82]
+          "links": [
+            82
+          ]
         }
       ],
       "properties": {
@@ -162,17 +150,25 @@
     {
       "id": 107,
       "type": "LoadImage",
-      "pos": [1082.250244140625, -34.84281921386719],
-      "size": [274.080078125, 314.0000305175781],
+      "pos": [
+        1082.250244140625,
+        -34.84281921386719
+      ],
+      "size": [
+        274.080078125,
+        314.0000305175781
+      ],
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [],
       "outputs": [
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": [79]
+          "links": [
+            79
+          ]
         },
         {
           "name": "MASK",
@@ -183,13 +179,22 @@
       "properties": {
         "Node name for S&R": "LoadImage"
       },
-      "widgets_values": ["00.jpg", "image"]
+      "widgets_values": [
+        "00.jpg",
+        "image"
+      ]
     },
     {
       "id": 110,
       "type": "LightX2VModularInference",
-      "pos": [1479.8463134765625, -292.079345703125],
-      "size": [400, 200],
+      "pos": [
+        1479.8463134765625,
+        -292.079345703125
+      ],
+      "size": [
+        400,
+        200
+      ],
       "flags": {},
       "order": 4,
       "mode": 0,
@@ -216,19 +221,35 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "links": [81]
+          "links": [
+            81
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
         }
       ],
       "properties": {
         "Node name for S&R": "LightX2VModularInference"
       },
-      "widgets_values": ["太空漫步，往前跑。 ", ""]
+      "widgets_values": [
+        "太空漫步，往前跑。 ",
+        ""
+      ]
     },
     {
       "id": 108,
       "type": "VHS_VideoCombine",
-      "pos": [1940.93017578125, -293.4468688964844],
-      "size": [220.5830078125, 524.5830078125],
+      "pos": [
+        1940.93017578125,
+        -293.4468688964844
+      ],
+      "size": [
+        220.5830078125,
+        334
+      ],
       "flags": {},
       "order": 6,
       "mode": 0,
@@ -275,6 +296,7 @@
         "pix_fmt": "yuv420p",
         "crf": 19,
         "save_metadata": true,
+        "trim_to_audio": false,
         "pingpong": false,
         "save_output": true,
         "videopreview": {
@@ -290,24 +312,116 @@
           "muted": false
         }
       }
+    },
+    {
+      "id": 105,
+      "type": "LightX2VInferenceConfig",
+      "pos": [
+        1073.62646484375,
+        -580.9854125976562
+      ],
+      "size": [
+        270,
+        346
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "inference_config",
+          "type": "INFERENCE_CONFIG",
+          "links": [
+            76
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VInferenceConfig"
+      },
+      "widgets_values": [
+        "wan2.1",
+        "Wan2.1-I2V-14B-480P",
+        "i2v",
+        4,
+        1822974886,
+        "fixed",
+        1,
+        8,
+        480,
+        480,
+        5,
+        "",
+        false
+      ]
     }
   ],
   "links": [
-    [76, 105, 0, 109, 0, "INFERENCE_CONFIG"],
-    [78, 109, 0, 110, 0, "COMBINED_CONFIG"],
-    [79, 107, 0, 110, 1, "IMAGE"],
-    [80, 109, 0, 111, 0, "*"],
-    [81, 110, 0, 108, 0, "IMAGE"],
-    [82, 112, 0, 109, 5, "LORA_CHAIN"]
+    [
+      76,
+      105,
+      0,
+      109,
+      0,
+      "INFERENCE_CONFIG"
+    ],
+    [
+      78,
+      109,
+      0,
+      110,
+      0,
+      "COMBINED_CONFIG"
+    ],
+    [
+      79,
+      107,
+      0,
+      110,
+      1,
+      "IMAGE"
+    ],
+    [
+      80,
+      109,
+      0,
+      111,
+      0,
+      "*"
+    ],
+    [
+      81,
+      110,
+      0,
+      108,
+      0,
+      "IMAGE"
+    ],
+    [
+      82,
+      112,
+      0,
+      109,
+      5,
+      "LORA_CHAIN"
+    ]
   ],
   "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.7513148009015777,
-      "offset": [-282.5313156431909, 675.8508927908888]
+      "scale": 0.9090909090909091,
+      "offset": [
+        -410.4301352345007,
+        742.4904101052797
+      ]
     },
-    "frontendVersion": "1.19.9"
+    "frontendVersion": "1.23.4",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
   },
   "version": 0.4
 }

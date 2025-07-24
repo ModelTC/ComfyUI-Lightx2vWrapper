@@ -98,22 +98,14 @@ class LightX2VInferenceConfig:
                         "tooltip": "Video width",
                     },
                 ),
-                "video_length": (
-                    "INT",
+                "duration": (
+                    "FLOAT",
                     {
-                        "default": 81,
-                        "min": 16,
-                        "max": 120,
-                        "tooltip": "Video frame count",
-                    },
-                ),
-                "fps": (
-                    "INT",
-                    {
-                        "default": 16,
-                        "min": 8,
-                        "max": 30,
-                        "tooltip": "Model output frame rate (cannot be changed)",
+                        "default": 5.0,
+                        "min": 1.0,
+                        "max": 10.0,
+                        "step": 0.1,
+                        "tooltip": "Video duration in seconds",
                     },
                 ),
             },
@@ -123,6 +115,13 @@ class LightX2VInferenceConfig:
                     {
                         "default": "",
                         "tooltip": "Custom denoising steps for distillation models (comma-separated, e.g., '999,750,500,250'). Leave empty to use model defaults.",
+                    },
+                ),
+                "adaptive_resize": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Adaptive resize input image to target aspect ratio",
                     },
                 ),
             },
@@ -144,12 +143,30 @@ class LightX2VInferenceConfig:
         sample_shift,
         height,
         width,
-        video_length,
-        fps,
+        duration,
         denoising_steps="",
+        adaptive_resize=False,
     ):
         """Create basic inference configuration."""
         model_path = get_model_full_path(model_name)
+        
+        if model_cls == "hunyuan":
+            fps = 24
+        else:
+            fps = 16 
+        
+        video_length = int(round(duration * fps))
+        
+        if video_length < 16:
+            video_length = 16
+        
+        remainder = (video_length - 1) % 4
+        if remainder != 0:
+            video_length = video_length + (4 - remainder)
+
+        #TODO(xxx): 
+        if "wan2.1_audio" in [model_cls]:
+            video_length = 81
 
         config = {
             "model_cls": model_cls,
@@ -163,6 +180,8 @@ class LightX2VInferenceConfig:
             "width": width,
             "video_length": video_length,
             "fps": fps,
+            "video_duration": duration,
+            "adaptive_resize": adaptive_resize,
         }
 
         if denoising_steps and denoising_steps.strip():
@@ -579,8 +598,8 @@ class LightX2VModularInference:
             },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("images",)
+    RETURN_TYPES = ("IMAGE", "AUDIO")
+    RETURN_NAMES = ("images", "audio")
     FUNCTION = "generate"
     CATEGORY = "LightX2V/Inference"
 
@@ -634,21 +653,36 @@ class LightX2VModularInference:
                     pil_image.save(tmp.name)
                     config.image_path = tmp.name
                     temp_files.append(tmp.name)
+                logging.info(f"Image saved to {tmp.name}")
 
             if (
                 audio is not None
                 and hasattr(config, "model_cls")
                 and "audio" in config.model_cls
             ):
-                if isinstance(audio, tuple) and len(audio) == 2:
+                if isinstance(audio, dict) and 'waveform' in audio and 'sample_rate' in audio:
+                    waveform = audio['waveform']
+                    sample_rate = audio['sample_rate']
+                    
+                    # Handle different waveform shapes
+                    if isinstance(waveform, torch.Tensor):
+                        if waveform.dim() == 3:  # [batch, channels, samples]
+                            waveform = waveform[0]  # Take first batch
+                        if waveform.dim() == 2:  # [channels, samples]
+                            # Convert to [samples, channels] for wav file
+                            waveform = waveform.transpose(0, 1)
+                        waveform = waveform.cpu().numpy()
+                elif isinstance(audio, tuple) and len(audio) == 2:
+                    # Legacy format support
                     waveform, sample_rate = audio
-
                     if isinstance(waveform, torch.Tensor):
                         waveform = waveform.cpu().numpy()
+                else:
+                    raise ValueError(f"Unsupported audio format: {type(audio)}")
 
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".wav", delete=False
-                    ) as tmp:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".wav", delete=False
+                ) as tmp:
                         try:
                             import scipy.io.wavfile as wavfile
                         except ImportError:
@@ -674,6 +708,9 @@ class LightX2VModularInference:
                         config.audio_path = tmp.name
                         temp_files.append(tmp.name)
 
+                        logging.info(f"Audio saved to {tmp.name}")
+                
+
             config_hash = self._get_config_hash(config)
             needs_reinit = (
                 self._current_runner is None
@@ -694,7 +731,7 @@ class LightX2VModularInference:
                     self._current_runner.config = config
 
             total_steps = getattr(config, "infer_steps", 40)
-            progress = ProgressBar(total_steps)
+            progress = ProgressBar(100)
 
             def update_progress(current_step, total):
                 progress.update_absolute(current_step)
@@ -702,11 +739,9 @@ class LightX2VModularInference:
             if hasattr(self._current_runner, "set_progress_callback"):
                 self._current_runner.set_progress_callback(update_progress)
 
-            if hasattr(self._current_runner, "run_pipeline"):
-                images = self._current_runner.run_pipeline(save_video=False)
-            else:
-                images = self._current_runner()
-
+            
+            images, audio = self._current_runner.run_pipeline(save_video=False)
+            
             if getattr(config, "unload_after_inference", False):
                 del self._current_runner
                 self._current_runner = None
@@ -715,11 +750,8 @@ class LightX2VModularInference:
             torch.cuda.empty_cache()
             gc.collect()
 
-            images = (images + 1) / 2
-            images = images.squeeze(0).permute(1, 2, 3, 0).cpu()
-            images = torch.clamp(images, 0, 1)
 
-            return (images,)
+            return (images, audio)
 
         except Exception as e:
             logging.error(f"Error during inference: {e}")

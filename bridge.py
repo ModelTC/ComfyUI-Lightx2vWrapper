@@ -324,6 +324,12 @@ class ModularConfigManager:
         if "fps" in config:
             updates["fps"] = config["fps"]
 
+        if "video_duration" in config:
+            updates["video_duration"] = config["video_duration"]
+        
+        if "adaptive_resize" in config:
+            updates["adaptive_resize"] = config["adaptive_resize"]
+
         if "denoising_step_list" in config:
             updates["denoising_step_list"] = config["denoising_step_list"]
 

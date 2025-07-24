@@ -108,49 +108,6 @@
       "widgets_values": []
     },
     {
-      "id": 105,
-      "type": "LightX2VInferenceConfig",
-      "pos": [
-        1073.62646484375,
-        -580.9854125976562
-      ],
-      "size": [
-        270,
-        346
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "inference_config",
-          "type": "INFERENCE_CONFIG",
-          "links": [
-            76
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LightX2VInferenceConfig"
-      },
-      "widgets_values": [
-        "wan2.1",
-        "Wan2.1-I2V-14B-480P",
-        "i2v",
-        40,
-        1822974886,
-        "fixed",
-        5,
-        3,
-        480,
-        480,
-        81,
-        16,
-        ""
-      ]
-    },
-    {
       "id": 110,
       "type": "LightX2VModularInference",
       "pos": [
@@ -190,6 +147,11 @@
           "links": [
             81
           ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
         }
       ],
       "properties": {
@@ -209,7 +171,7 @@
       ],
       "size": [
         220.5830078125,
-        524.5830078125
+        334
       ],
       "flags": {},
       "order": 5,
@@ -257,6 +219,7 @@
         "pix_fmt": "yuv420p",
         "crf": 19,
         "save_metadata": true,
+        "trim_to_audio": false,
         "pingpong": false,
         "save_output": true,
         "videopreview": {
@@ -277,8 +240,8 @@
       "id": 111,
       "type": "easy showAnything",
       "pos": [
-        1773.56689453125,
-        -706.2327270507812
+        1766.246337890625,
+        -545.1817016601562
       ],
       "size": [
         624.5454711914062,
@@ -309,6 +272,49 @@
       },
       "widgets_values": [
         "{\"model_cls\": \"wan2.1\", \"model_path\": \"/mnt/aigc/users/lijiaqi2/ComfyUI/models/lightx2v/Wan2.1-I2V-14B-480P\", \"task\": \"i2v\", \"mode\": \"infer\", \"infer_steps\": 40, \"seed\": 1822974886, \"sample_guide_scale\": 5.0, \"sample_shift\": 3, \"enable_cfg\": true, \"prompt\": \"\", \"negative_prompt\": \"\", \"target_height\": 480, \"target_width\": 480, \"target_video_length\": 81, \"fps\": 16, \"vae_stride\": [4, 8, 8], \"patch_size\": [1, 2, 2], \"feature_caching\": \"NoCaching\", \"teacache_thresh\": 0.26, \"coefficients\": null, \"use_ret_steps\": false, \"dit_quant_scheme\": \"bf16\", \"t5_quant_scheme\": \"bf16\", \"clip_quant_scheme\": \"fp16\", \"quant_op\": \"vllm\", \"precision_mode\": \"fp32\", \"dit_quantized_ckpt\": null, \"t5_quantized_ckpt\": null, \"clip_quantized_ckpt\": null, \"mm_config\": {\"mm_type\": \"Default\"}, \"rotary_chunk\": false, \"rotary_chunk_size\": 100, \"clean_cuda_cache\": false, \"torch_compile\": false, \"attention_type\": \"flash_attn3\", \"self_attn_1_type\": \"flash_attn3\", \"cross_attn_1_type\": \"flash_attn3\", \"cross_attn_2_type\": \"flash_attn3\", \"cpu_offload\": false, \"offload_granularity\": \"phase\", \"offload_ratio\": 1.0, \"t5_cpu_offload\": false, \"t5_offload_granularity\": \"model\", \"lazy_load\": false, \"unload_modules\": false, \"use_tiny_vae\": false, \"tiny_vae\": false, \"tiny_vae_path\": null, \"use_tiling_vae\": false, \"lora_path\": null, \"strength_model\": 1.0, \"do_mm_calib\": false, \"parallel_attn_type\": null, \"parallel_vae\": false, \"max_area\": false, \"use_prompt_enhancer\": false, \"text_len\": 512, \"_class_name\": \"WanModel\", \"_diffusers_version\": \"0.30.0\", \"dim\": 5120, \"eps\": 1e-06, \"ffn_dim\": 13824, \"freq_dim\": 256, \"in_dim\": 36, \"model_type\": \"i2v\", \"num_heads\": 40, \"num_layers\": 40, \"out_dim\": 16}"
+      ]
+    },
+    {
+      "id": 105,
+      "type": "LightX2VInferenceConfig",
+      "pos": [
+        1073.62646484375,
+        -580.9854125976562
+      ],
+      "size": [
+        270,
+        346
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "inference_config",
+          "type": "INFERENCE_CONFIG",
+          "links": [
+            76
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VInferenceConfig"
+      },
+      "widgets_values": [
+        "wan2.1",
+        "Wan2.1-I2V-14B-480P",
+        "i2v",
+        40,
+        1822974886,
+        "fixed",
+        5,
+        3,
+        480,
+        480,
+        5,
+        "",
+        ""
       ]
     }
   ],
@@ -360,11 +366,15 @@
     "ds": {
       "scale": 1,
       "offset": [
-        -697.2225740954825,
-        708.7013290998841
+        -584.0960104591186,
+        687.7305563726111
       ]
     },
-    "frontendVersion": "1.19.9"
+    "frontendVersion": "1.23.4",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
   },
   "version": 0.4
 }
