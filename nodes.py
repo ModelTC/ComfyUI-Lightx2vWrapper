@@ -81,7 +81,7 @@ class LightX2VInferenceConfig:
                 "height": (
                     "INT",
                     {
-                        "default": 480,
+                        "default": 1280,
                         "min": 64,
                         "max": 2048,
                         "step": 8,
@@ -91,7 +91,7 @@ class LightX2VInferenceConfig:
                 "width": (
                     "INT",
                     {
-                        "default": 832,
+                        "default": 720,
                         "min": 64,
                         "max": 2048,
                         "step": 8,
@@ -103,7 +103,7 @@ class LightX2VInferenceConfig:
                     {
                         "default": 5.0,
                         "min": 1.0,
-                        "max": 10.0,
+                        "max": 999,
                         "step": 0.1,
                         "tooltip": "Video duration in seconds",
                     },
@@ -149,22 +149,22 @@ class LightX2VInferenceConfig:
     ):
         """Create basic inference configuration."""
         model_path = get_model_full_path(model_name)
-        
+
         if model_cls == "hunyuan":
             fps = 24
         else:
-            fps = 16 
-        
+            fps = 16
+
         video_length = int(round(duration * fps))
-        
+
         if video_length < 16:
             video_length = 16
-        
+
         remainder = (video_length - 1) % 4
         if remainder != 0:
             video_length = video_length + (4 - remainder)
 
-        #TODO(xxx): 
+        # TODO(xxx):
         if "wan2.1_audio" in [model_cls]:
             video_length = 81
 
@@ -655,15 +655,11 @@ class LightX2VModularInference:
                     temp_files.append(tmp.name)
                 logging.info(f"Image saved to {tmp.name}")
 
-            if (
-                audio is not None
-                and hasattr(config, "model_cls")
-                and "audio" in config.model_cls
-            ):
-                if isinstance(audio, dict) and 'waveform' in audio and 'sample_rate' in audio:
-                    waveform = audio['waveform']
-                    sample_rate = audio['sample_rate']
-                    
+            if audio is not None and hasattr(config, "model_cls") and "audio" in config.model_cls:
+                if isinstance(audio, dict) and "waveform" in audio and "sample_rate" in audio:
+                    waveform = audio["waveform"]
+                    sample_rate = audio["sample_rate"]
+
                     # Handle different waveform shapes
                     if isinstance(waveform, torch.Tensor):
                         if waveform.dim() == 3:  # [batch, channels, samples]
@@ -680,43 +676,34 @@ class LightX2VModularInference:
                 else:
                     raise ValueError(f"Unsupported audio format: {type(audio)}")
 
-                with tempfile.NamedTemporaryFile(
-                    suffix=".wav", delete=False
-                ) as tmp:
-                        try:
-                            import scipy.io.wavfile as wavfile
-                        except ImportError:
-                            import wave
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    try:
+                        import scipy.io.wavfile as wavfile
+                    except ImportError:
+                        import wave
 
-                            with wave.open(tmp.name, "wb") as wav_file:
-                                wav_file.setnchannels(
-                                    1 if waveform.ndim == 1 else waveform.shape[-1]
-                                )
-                                wav_file.setsampwidth(2)  # 16-bit
-                                wav_file.setframerate(sample_rate)
-                                if waveform.dtype != np.int16:
-                                    waveform = (waveform * 32767).astype(np.int16)
-                                wav_file.writeframes(waveform.tobytes())
+                        with wave.open(tmp.name, "wb") as wav_file:
+                            wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
+                            wav_file.setsampwidth(2)  # 16-bit
+                            wav_file.setframerate(sample_rate)
+                            if waveform.dtype != np.int16:
+                                waveform = (waveform * 32767).astype(np.int16)
+                            wav_file.writeframes(waveform.tobytes())
+                    else:
+                        if waveform.ndim == 1:
+                            wavfile.write(tmp.name, sample_rate, waveform)
                         else:
-                            if waveform.ndim == 1:
-                                wavfile.write(tmp.name, sample_rate, waveform)
-                            else:
-                                if waveform.shape[0] < waveform.shape[1]:
-                                    waveform = waveform.T
-                                wavfile.write(tmp.name, sample_rate, waveform)
+                            if waveform.shape[0] < waveform.shape[1]:
+                                waveform = waveform.T
+                            wavfile.write(tmp.name, sample_rate, waveform)
 
-                        config.audio_path = tmp.name
-                        temp_files.append(tmp.name)
+                    config.audio_path = tmp.name
+                    temp_files.append(tmp.name)
 
-                        logging.info(f"Audio saved to {tmp.name}")
-                
+                    logging.info(f"Audio saved to {tmp.name}")
 
             config_hash = self._get_config_hash(config)
-            needs_reinit = (
-                self._current_runner is None
-                or self._current_config_hash != config_hash
-                or getattr(config, "lazy_load", False)
-            )
+            needs_reinit = self._current_runner is None or self._current_config_hash != config_hash or getattr(config, "lazy_load", False)
 
             if needs_reinit:
                 if self._current_runner is not None:
@@ -739,9 +726,8 @@ class LightX2VModularInference:
             if hasattr(self._current_runner, "set_progress_callback"):
                 self._current_runner.set_progress_callback(update_progress)
 
-            
             images, audio = self._current_runner.run_pipeline(save_video=False)
-            
+
             if getattr(config, "unload_after_inference", False):
                 del self._current_runner
                 self._current_runner = None
@@ -749,7 +735,6 @@ class LightX2VModularInference:
 
             torch.cuda.empty_cache()
             gc.collect()
-
 
             return (images, audio)
 
