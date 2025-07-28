@@ -157,6 +157,8 @@ class LightX2VDefaultConfig:
         "max_area": False,
         "use_prompt_enhancer": False,
         "text_len": 512,
+        # ========== Wan2.1 Audio Settings ==========
+        "use_31_block": True,
     }
 
 
@@ -326,12 +328,15 @@ class ModularConfigManager:
 
         if "video_duration" in config:
             updates["video_duration"] = config["video_duration"]
-        
+
         if "adaptive_resize" in config:
             updates["adaptive_resize"] = config["adaptive_resize"]
 
         if "denoising_step_list" in config:
             updates["denoising_step_list"] = config["denoising_step_list"]
+
+        if "use_31_block" in config:
+            updates["use_31_block"] = config["use_31_block"]
 
         return updates
 
@@ -409,9 +414,7 @@ class ModularConfigManager:
                 updates["t5_quant_scheme"] = "int8-q8f"
                 updates["clip_quant_scheme"] = "int8-q8f"
             elif quant_backend == "torchao":
-                mm_type = (
-                    f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Torchao"
-                )
+                mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Torchao"
                 updates["t5_quant_scheme"] = "int8-torchao"
                 updates["clip_quant_scheme"] = "int8-torchao"
             else:
