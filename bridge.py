@@ -154,6 +154,7 @@ class LightX2VDefaultConfig:
         "do_mm_calib": False,
         "parallel_attn_type": None,
         "parallel_vae": False,
+        "parallel": False,
         "max_area": False,
         "use_prompt_enhancer": False,
         "text_len": 512,
