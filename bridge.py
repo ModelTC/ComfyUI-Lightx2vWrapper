@@ -155,6 +155,8 @@ class LightX2VDefaultConfig:
         "parallel_attn_type": None,
         "parallel_vae": False,
         "parallel": False,
+        "seq_parallel": False,
+        "cfg_parallel": False,
         "max_area": False,
         "use_prompt_enhancer": False,
         "text_len": 512,
@@ -341,9 +343,7 @@ class ModularConfigManager:
 
         return updates
 
-    def apply_teacache_config(
-        self, config: Dict[str, Any], model_info: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def apply_teacache_config(self, config: Dict[str, Any], model_info: Dict[str, Any]) -> Dict[str, Any]:
         """Apply TeaCache configuration."""
         updates = {}
 
@@ -359,18 +359,14 @@ class ModularConfigManager:
                 model_info.get("target_height", 480),
             )
 
-            coeffs = CoefficientCalculator.get_coefficients(
-                task, model_size, resolution, updates["use_ret_steps"]
-            )
+            coeffs = CoefficientCalculator.get_coefficients(task, model_size, resolution, updates["use_ret_steps"])
             updates["coefficients"] = coeffs
         else:
             updates["feature_caching"] = "NoCaching"
 
         return updates
 
-    def apply_quantization_config(
-        self, config: Dict[str, Any], model_path: str
-    ) -> Dict[str, Any]:
+    def apply_quantization_config(self, config: Dict[str, Any], model_path: str) -> Dict[str, Any]:
         """Apply quantization configuration."""
         updates = {}
 
@@ -384,18 +380,14 @@ class ModularConfigManager:
         updates["t5_quantized"] = t5_scheme != "bf16"
         if t5_scheme != "bf16":
             t5_path = os.path.join(model_path, t5_scheme)
-            updates["t5_quantized_ckpt"] = os.path.join(
-                t5_path, f"models_t5_umt5-xxl-enc-{t5_scheme}.pth"
-            )
+            updates["t5_quantized_ckpt"] = os.path.join(t5_path, f"models_t5_umt5-xxl-enc-{t5_scheme}.pth")
 
         clip_scheme = config.get("clip_precision", "fp16")
         updates["clip_quant_scheme"] = clip_scheme
         updates["clip_quantized"] = clip_scheme != "fp16"
         if clip_scheme != "fp16":
             clip_path = os.path.join(model_path, clip_scheme)
-            updates["clip_quantized_ckpt"] = os.path.join(
-                clip_path, f"clip-{clip_scheme}.pth"
-            )
+            updates["clip_quantized_ckpt"] = os.path.join(clip_path, f"clip-{clip_scheme}.pth")
 
         quant_backend = config.get("quant_backend", "vllm")
         updates["quant_op"] = quant_backend
@@ -409,9 +401,7 @@ class ModularConfigManager:
                 else:
                     mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Sgl"
             elif quant_backend == "q8f":
-                mm_type = (
-                    f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Q8F"
-                )
+                mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Q8F"
                 updates["t5_quant_scheme"] = "int8-q8f"
                 updates["clip_quant_scheme"] = "int8-q8f"
             elif quant_backend == "torchao":
@@ -456,9 +446,7 @@ class ModularConfigManager:
         # T5 offloading
         if level in ["high", "extreme"]:
             updates["t5_cpu_offload"] = True
-            updates["t5_offload_granularity"] = (
-                "block" if level == "extreme" else "model"
-            )
+            updates["t5_offload_granularity"] = "block" if level == "extreme" else "model"
 
         # Module management
         if config.get("lazy_load", False) or level == "extreme":
@@ -476,9 +464,7 @@ class ModularConfigManager:
 
         return updates
 
-    def apply_vae_config(
-        self, config: Dict[str, Any], model_path: str
-    ) -> Dict[str, Any]:
+    def apply_vae_config(self, config: Dict[str, Any], model_path: str) -> Dict[str, Any]:
         """Apply VAE configuration."""
         updates = {}
 
@@ -508,9 +494,7 @@ class ModularConfigManager:
 
         if "quantization" in configs:
             model_path = final_config.get("model_path", "")
-            quant_updates = self.apply_quantization_config(
-                configs["quantization"], model_path
-            )
+            quant_updates = self.apply_quantization_config(configs["quantization"], model_path)
             final_config.update(quant_updates)
 
         if "memory" in configs:
