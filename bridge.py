@@ -1,5 +1,3 @@
-"""Modular configuration system for LightX2V ComfyUI integration."""
-
 import copy
 import importlib.util
 import json
@@ -11,12 +9,28 @@ import torch
 from easydict import EasyDict
 
 
-def is_fp8_supported_gpu():
+def get_gpu_capability():
     if not torch.cuda.is_available():
+        return None, None
+    try:
+        return torch.cuda.get_device_capability(0)
+    except Exception as e:
+        logging.warning(f"Failed to get GPU capability: {e}")
+        return None, None
+
+
+def is_fp8_supported_gpu():
+    major, minor = get_gpu_capability()
+    if major is None:
         return False
-    compute_capability = torch.cuda.get_device_capability(0)
-    major, minor = compute_capability
     return (major == 8 and minor == 9) or (major >= 9)
+
+
+def is_ada_architecture_gpu():
+    major, minor = get_gpu_capability()
+    if major is None:
+        return False
+    return major == 8 and minor == 9
 
 
 def is_module_installed(module_name):
@@ -27,76 +41,51 @@ def is_module_installed(module_name):
         return False
 
 
-def get_available_quant_ops():
+def get_available_ops(op_mapping):
+    """通用的操作可用性检查函数"""
     available_ops = []
+    for op_name, module_name in op_mapping.items():
+        is_available = is_module_installed(module_name)
+        available_ops.append((op_name, is_available))
+    return available_ops
 
-    vllm_installed = is_module_installed("vllm")
-    if vllm_installed:
-        available_ops.append(("vllm", True))
-    else:
-        available_ops.append(("vllm", False))
 
-    sgl_installed = is_module_installed("sgl_kernel")
-    if sgl_installed:
-        available_ops.append(("sgl", True))
-    else:
-        available_ops.append(("sgl", False))
+def get_available_quant_ops():
+    quant_mapping = {"sgl": "sgl_kernel", "vllm": "vllm", "q8f": "q8_kernels", "torchao": "torchao"}
 
-    q8f_installed = is_module_installed("q8_kernels")
-    if q8f_installed:
-        available_ops.append(("q8f", True))
-    else:
-        available_ops.append(("q8f", False))
+    available_ops = get_available_ops(quant_mapping)
 
-    torchao_installed = is_module_installed("torchao")
-    if torchao_installed:
-        available_ops.append(("torchao", True))
-    else:
-        available_ops.append(("torchao", False))
+    # Ada架构GPU优先使用q8f
+    if is_ada_architecture_gpu():
+        q8f_available = next((op for op in available_ops if op[0] == "q8f" and op[1]), None)
+        if q8f_available:
+            available_ops.remove(q8f_available)
+            available_ops.insert(0, q8f_available)
 
     return available_ops
 
 
 def get_available_attn_ops():
-    available_ops = []
+    attn_mapping = {"sage_attn2": "sageattention", "flash_attn3": "flash_attn_interface", "flash_attn2": "flash_attn", "torch_sdpa": "torch"}
 
-    vllm_installed = is_module_installed("flash_attn")
-    if vllm_installed:
-        available_ops.append(("flash_attn2", True))
-    else:
-        available_ops.append(("flash_attn2", False))
-
-    sgl_installed = is_module_installed("flash_attn_interface")
-    if sgl_installed:
-        available_ops.append(("flash_attn3", True))
-    else:
-        available_ops.append(("flash_attn3", False))
-
-    q8f_installed = is_module_installed("sageattention")
-    if q8f_installed:
-        available_ops.append(("sage_attn2", True))
-    else:
-        available_ops.append(("sage_attn2", False))
-
-    torch_installed = is_module_installed("torch")
-    if torch_installed:
-        available_ops.append(("torch_sdpa", True))
-    else:
-        available_ops.append(("torch_sdpa", False))
-
-    return available_ops
+    return get_available_ops(attn_mapping)
 
 
 class LightX2VDefaultConfig:
     """Central default configuration for LightX2V."""
 
+    # 分组常量
+    DEFAULT_ATTENTION_TYPE = "flash_attn3"
+    DEFAULT_QUANTIZATION_SCHEMES = {"dit": "bf16", "t5": "bf16", "clip": "fp16"}
+    DEFAULT_VIDEO_PARAMS = {"height": 480, "width": 832, "length": 81, "fps": 16, "vae_stride": [4, 8, 8], "patch_size": [1, 2, 2]}
+
     DEFAULT_CONFIG = {
-        # ========== Model Configuration ==========
+        # Model Configuration
         "model_cls": "wan2.1",
         "model_path": "",
         "task": "t2v",
         "mode": "infer",
-        # ========== Inference Parameters ==========
+        # Inference Parameters
         "infer_steps": 40,
         "seed": 42,
         "sample_guide_scale": 5.0,
@@ -104,38 +93,38 @@ class LightX2VDefaultConfig:
         "enable_cfg": True,
         "prompt": "",
         "negative_prompt": "",
-        # ========== Video Parameters ==========
-        "target_height": 480,
-        "target_width": 832,
-        "target_video_length": 81,
-        "fps": 16,
-        "vae_stride": [4, 8, 8],
-        "patch_size": [1, 2, 2],
-        # ========== Feature Caching (TeaCache) ==========
+        # Video Parameters
+        "target_height": DEFAULT_VIDEO_PARAMS["height"],
+        "target_width": DEFAULT_VIDEO_PARAMS["width"],
+        "target_video_length": DEFAULT_VIDEO_PARAMS["length"],
+        "fps": DEFAULT_VIDEO_PARAMS["fps"],
+        "vae_stride": DEFAULT_VIDEO_PARAMS["vae_stride"],
+        "patch_size": DEFAULT_VIDEO_PARAMS["patch_size"],
+        # TeaCache
         "feature_caching": "NoCaching",
         "teacache_thresh": 0.26,
-        "coefficients": None,  # Auto-calculated
+        "coefficients": None,
         "use_ret_steps": False,
-        # ========== Quantization ==========
-        "dit_quant_scheme": "bf16",
-        "t5_quant_scheme": "bf16",
-        "clip_quant_scheme": "fp16",
+        # Quantization
+        "dit_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["dit"],
+        "t5_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["t5"],
+        "clip_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["clip"],
         "quant_op": "vllm",
         "precision_mode": "fp32",
         "dit_quantized_ckpt": None,
         "t5_quantized_ckpt": None,
         "clip_quantized_ckpt": None,
         "mm_config": {"mm_type": "Default"},
-        # ========== GPU Memory Optimization ==========
+        # Memory Optimization
         "rotary_chunk": False,
         "rotary_chunk_size": 100,
         "clean_cuda_cache": False,
         "torch_compile": False,
-        "attention_type": "flash_attn3",
-        "self_attn_1_type": "flash_attn3",
-        "cross_attn_1_type": "flash_attn3",
-        "cross_attn_2_type": "flash_attn3",
-        # ========== Async Offloading ==========
+        "attention_type": DEFAULT_ATTENTION_TYPE,
+        "self_attn_1_type": DEFAULT_ATTENTION_TYPE,
+        "cross_attn_1_type": DEFAULT_ATTENTION_TYPE,
+        "cross_attn_2_type": DEFAULT_ATTENTION_TYPE,
+        # CPU Offloading
         "cpu_offload": False,
         "offload_granularity": "phase",
         "offload_ratio": 1.0,
@@ -143,12 +132,12 @@ class LightX2VDefaultConfig:
         "t5_offload_granularity": "model",
         "lazy_load": False,
         "unload_modules": False,
-        # ========== Lightweight VAE ==========
+        # VAE Settings
         "use_tiny_vae": False,
         "tiny_vae": False,
         "tiny_vae_path": None,
         "use_tiling_vae": False,
-        # ========== Other Settings ==========
+        # Other Settings
         "lora_path": None,
         "strength_model": 1.0,
         "do_mm_calib": False,
@@ -160,7 +149,6 @@ class LightX2VDefaultConfig:
         "max_area": False,
         "use_prompt_enhancer": False,
         "text_len": 512,
-        # ========== Wan2.1 Audio Settings ==========
         "use_31_block": True,
     }
 
@@ -270,76 +258,73 @@ class ModularConfigManager:
         self._available_attn_ops = None
         self._available_quant_ops = None
 
+    def _get_available_ops(self, ops_list: List[Tuple[str, bool]], fallback: str = None) -> List[str]:
+        """从操作列表中提取可用的操作"""
+        available = [op_name for op_name, is_available in ops_list if is_available]
+        if fallback and fallback not in available:
+            available.append(fallback)
+        return available
+
     @property
     def available_attention_types(self) -> List[str]:
         """Get available attention types."""
         if self._available_attn_ops is None:
             self._available_attn_ops = get_available_attn_ops()
-
-        available = []
-        for op_name, is_available in self._available_attn_ops:
-            if is_available:
-                available.append(op_name)
-
-        if "torch_sdpa" not in available:
-            available.append("torch_sdpa")
-
-        return available
+        return self._get_available_ops(self._available_attn_ops, "torch_sdpa")
 
     @property
     def available_quant_schemes(self) -> List[str]:
         """Get available quantization schemes."""
         if self._available_quant_ops is None:
             self._available_quant_ops = get_available_quant_ops()
+        return self._get_available_ops(self._available_quant_ops)
 
-        available = []
-        for op_name, is_available in self._available_quant_ops:
-            if is_available:
-                available.append(op_name)
-
-        return available
+    def _update_from_config(self, updates: Dict, config: Dict, mappings: Dict[str, str]) -> None:
+        """通用配置更新方法"""
+        for config_key, update_key in mappings.items():
+            if config_key in config:
+                if config_key == "seed" and config[config_key] == -1:
+                    continue
+                updates[update_key] = config[config_key]
 
     def apply_inference_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Apply basic inference configuration."""
         updates = {}
 
-        if "model_cls" in config:
-            updates["model_cls"] = config["model_cls"]
-        if "model_path" in config:
-            updates["model_path"] = config["model_path"]
-        if "task" in config:
-            updates["task"] = config["task"]
+        # 基础映射配置
+        basic_mappings = {
+            "model_cls": "model_cls",
+            "model_path": "model_path",
+            "task": "task",
+            "infer_steps": "infer_steps",
+            "seed": "seed",
+            "sample_shift": "sample_shift",
+            "height": "target_height",
+            "width": "target_width",
+            "video_length": "target_video_length",
+            "fps": "fps",
+            "video_duration": "video_duration",
+            "resize_mode": "resize_mode",
+            "denoising_step_list": "denoising_step_list",
+            "use_31_block": "use_31_block",
+            "prev_frame_length": "prev_frame_length",
+        }
 
-        if "infer_steps" in config:
-            updates["infer_steps"] = config["infer_steps"]
-        if "seed" in config and config["seed"] != -1:
-            updates["seed"] = config["seed"]
+        self._update_from_config(updates, config, basic_mappings)
+
+        # CFG特殊处理
         if "cfg_scale" in config:
             updates["sample_guide_scale"] = config["cfg_scale"]
             updates["enable_cfg"] = config["cfg_scale"] != 1.0
-        if "sample_shift" in config:
-            updates["sample_shift"] = config["sample_shift"]
 
-        if "height" in config:
-            updates["target_height"] = config["height"]
-        if "width" in config:
-            updates["target_width"] = config["width"]
-        if "video_length" in config:
-            updates["target_video_length"] = config["video_length"]
-        if "fps" in config:
-            updates["fps"] = config["fps"]
+        # 注意力类型配置
+        attention_type = config.get("attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE)
+        for attn_key in ["attention_type", "self_attn_1_type", "cross_attn_1_type", "cross_attn_2_type"]:
+            updates[attn_key] = attention_type
 
-        if "video_duration" in config:
-            updates["video_duration"] = config["video_duration"]
-
-        if "adaptive_resize" in config:
-            updates["adaptive_resize"] = config["adaptive_resize"]
-
-        if "denoising_step_list" in config:
-            updates["denoising_step_list"] = config["denoising_step_list"]
-
-        if "use_31_block" in config:
-            updates["use_31_block"] = config["use_31_block"]
+        # TinyVAE配置
+        if config.get("use_tiny_vae", False):
+            updates.update({"use_tiny_vae": True, "tiny_vae": True, "tiny_vae_path": os.path.join(config["model_path"], "taew2_1.pth")})
 
         return updates
 
@@ -366,130 +351,143 @@ class ModularConfigManager:
 
         return updates
 
+    def _get_mm_type(self, dit_scheme: str, quant_backend: str) -> str:
+        """获取mm_type配置"""
+        if dit_scheme == "bf16":
+            return "Default"
+
+        base_pattern = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic"
+
+        if quant_backend == "vllm":
+            return f"{base_pattern}-Vllm"
+        elif quant_backend == "sgl":
+            suffix = "-Sgl-ActVllm" if dit_scheme == "int8" else "-Sgl"
+            return f"{base_pattern}{suffix}"
+        elif quant_backend == "q8f":
+            return f"{base_pattern}-Q8F"
+        elif quant_backend == "torchao":
+            return f"{base_pattern}-Torchao"
+        else:
+            return "Default"
+
     def apply_quantization_config(self, config: Dict[str, Any], model_path: str) -> Dict[str, Any]:
         """Apply quantization configuration."""
         updates = {}
+        defaults = LightX2VDefaultConfig.DEFAULT_QUANTIZATION_SCHEMES
 
-        dit_scheme = config.get("dit_precision", "bf16")
-        updates["dit_quant_scheme"] = dit_scheme
-        if dit_scheme != "bf16":
+        # 获取量化方案
+        dit_scheme = config.get("dit_quant_scheme", defaults["dit"])
+        t5_scheme = config.get("t5_quant_scheme", defaults["t5"])
+        clip_scheme = config.get("clip_quant_scheme", defaults["clip"])
+        quant_backend = config.get("quant_op", "vllm")
+
+        updates.update(
+            {
+                "dit_quant_scheme": dit_scheme,
+                "t5_quant_scheme": t5_scheme,
+                "clip_quant_scheme": clip_scheme,
+                "t5_quantized": t5_scheme != defaults["t5"],
+                "clip_quantized": clip_scheme != defaults["clip"],
+            }
+        )
+
+        # 设置检查点路径
+        if dit_scheme != defaults["dit"]:
             updates["dit_quantized_ckpt"] = os.path.join(model_path, dit_scheme)
 
-        t5_scheme = config.get("t5_precision", "bf16")
-        updates["t5_quant_scheme"] = t5_scheme
-        updates["t5_quantized"] = t5_scheme != "bf16"
-        if t5_scheme != "bf16":
+        if t5_scheme != defaults["t5"]:
             t5_path = os.path.join(model_path, t5_scheme)
             updates["t5_quantized_ckpt"] = os.path.join(t5_path, f"models_t5_umt5-xxl-enc-{t5_scheme}.pth")
 
-        clip_scheme = config.get("clip_precision", "fp16")
-        updates["clip_quant_scheme"] = clip_scheme
-        updates["clip_quantized"] = clip_scheme != "fp16"
-        if clip_scheme != "fp16":
+        if clip_scheme != defaults["clip"]:
             clip_path = os.path.join(model_path, clip_scheme)
             updates["clip_quantized_ckpt"] = os.path.join(clip_path, f"clip-{clip_scheme}.pth")
 
-        quant_backend = config.get("quant_backend", "vllm")
-        updates["quant_op"] = quant_backend
+        # 特殊后端处理
+        if quant_backend in ["q8f", "torchao"]:
+            backend_suffix = f"int8-{quant_backend}"
+            updates.update({"t5_quant_scheme": backend_suffix, "clip_quant_scheme": backend_suffix})
 
-        if dit_scheme != "bf16":
-            if quant_backend == "vllm":
-                mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Vllm"
-            elif quant_backend == "sgl":
-                if dit_scheme == "int8":
-                    mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Sgl-ActVllm"
-                else:
-                    mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Sgl"
-            elif quant_backend == "q8f":
-                mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Q8F"
-                updates["t5_quant_scheme"] = "int8-q8f"
-                updates["clip_quant_scheme"] = "int8-q8f"
-            elif quant_backend == "torchao":
-                mm_type = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic-Torchao"
-                updates["t5_quant_scheme"] = "int8-torchao"
-                updates["clip_quant_scheme"] = "int8-torchao"
-            else:
-                mm_type = "Default"
-
-            updates["mm_config"] = {"mm_type": mm_type}
-        else:
-            updates["mm_config"] = {"mm_type": "Default"}
-
-        updates["precision_mode"] = config.get("sensitive_layers_precision", "fp32")
+        # 设置mm_config
+        mm_type = self._get_mm_type(dit_scheme, quant_backend)
+        updates["mm_config"] = {"mm_type": mm_type}
 
         return updates
 
     def apply_memory_optimization(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Apply memory optimization settings."""
         updates = {}
-
         level = config.get("optimization_level", "none")
 
-        # GPU optimization
-        if config.get("enable_rotary_chunk", False) or level in ["high", "extreme"]:
-            updates["rotary_chunk"] = True
+        # 级别映射配置
+        level_configs = {
+            "medium": {"cpu_offload": True},
+            "high": {"cpu_offload": True, "rotary_chunk": True, "t5_cpu_offload": True, "t5_offload_granularity": "model"},
+            "extreme": {
+                "cpu_offload": True,
+                "rotary_chunk": True,
+                "clean_cuda_cache": True,
+                "t5_cpu_offload": True,
+                "t5_offload_granularity": "block",
+                "lazy_load": True,
+                "unload_modules": True,
+            },
+        }
+
+        # 应用级别配置
+        if level in level_configs:
+            updates.update(level_configs[level])
+
+        # 直接配置项映射
+        direct_mappings = {
+            "enable_rotary_chunk": "rotary_chunk",
+            "clean_cuda_cache": "clean_cuda_cache",
+            "cpu_offload": "cpu_offload",
+            "lazy_load": "lazy_load",
+            "unload_after_inference": "unload_modules",
+            "use_tiling_vae": "use_tiling_vae",
+        }
+
+        for config_key, update_key in direct_mappings.items():
+            if config.get(config_key, False):
+                updates[update_key] = True
+
+        # 附加配置
+        if updates.get("rotary_chunk"):
             updates["rotary_chunk_size"] = config.get("rotary_chunk_size", 100)
 
-        if config.get("clean_cuda_cache", False) or level == "extreme":
-            updates["clean_cuda_cache"] = True
-
-        # CPU offloading
-        if config.get("enable_cpu_offload", False) or level in [
-            "medium",
-            "high",
-            "extreme",
-        ]:
-            updates["cpu_offload"] = True
-            updates["offload_granularity"] = config.get("offload_granularity", "phase")
-            updates["offload_ratio"] = config.get("offload_ratio", 1.0)
-
-        # T5 offloading
-        if level in ["high", "extreme"]:
-            updates["t5_cpu_offload"] = True
-            updates["t5_offload_granularity"] = "block" if level == "extreme" else "model"
-
-        # Module management
-        if config.get("lazy_load", False) or level == "extreme":
-            updates["lazy_load"] = True
-
-        if config.get("unload_after_inference", False) or level == "extreme":
-            updates["unload_modules"] = True
-
-        # Attention type
-        attention_type = config.get("attention_type", "flash_attn3")
-        updates["attention_type"] = attention_type
-        updates["self_attn_1_type"] = attention_type
-        updates["cross_attn_1_type"] = attention_type
-        updates["cross_attn_2_type"] = attention_type
+        if updates.get("cpu_offload"):
+            updates.update({"offload_granularity": config.get("offload_granularity", "phase"), "offload_ratio": config.get("offload_ratio", 1.0)})
 
         return updates
 
-    def apply_vae_config(self, config: Dict[str, Any], model_path: str) -> Dict[str, Any]:
-        """Apply VAE configuration."""
-        updates = {}
+    def _load_model_config(self, model_path: str) -> Dict[str, Any]:
+        """加载模型配置文件"""
+        config_path = os.path.join(model_path, "config.json")
+        if not os.path.exists(config_path):
+            return {}
 
-        if config.get("use_tiny_vae", False):
-            updates["use_tiny_vae"] = True
-            updates["tiny_vae"] = True
-            updates["tiny_vae_path"] = os.path.join(model_path, "taew2_1.pth")
-
-        if config.get("use_tiling_vae", False):
-            updates["use_tiling_vae"] = True
-
-        return updates
+        try:
+            with open(config_path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logging.warning(f"Failed to load model config: {e}")
+            return {}
 
     def build_final_config(self, configs: Dict[str, Dict[str, Any]]) -> EasyDict:
         """Build final configuration from module configs."""
         final_config = copy.deepcopy(self.base_config)
 
-        if "inference" in configs:
-            final_config.update(self.apply_inference_config(configs["inference"]))
+        # 应用配置模块
+        config_modules = [("inference", self.apply_inference_config), ("memory", self.apply_memory_optimization)]
 
+        for module_name, apply_func in config_modules:
+            if module_name in configs:
+                final_config.update(apply_func(configs[module_name]))
+
+        # 特殊处理的模块
         if "teacache" in configs:
-            teacache_updates = self.apply_teacache_config(
-                configs["teacache"],
-                final_config,
-            )
+            teacache_updates = self.apply_teacache_config(configs["teacache"], final_config)
             final_config.update(teacache_updates)
 
         if "quantization" in configs:
@@ -497,22 +495,10 @@ class ModularConfigManager:
             quant_updates = self.apply_quantization_config(configs["quantization"], model_path)
             final_config.update(quant_updates)
 
-        if "memory" in configs:
-            final_config.update(self.apply_memory_optimization(configs["memory"]))
-
-        if "vae" in configs:
-            model_path = final_config.get("model_path", "")
-            final_config.update(self.apply_vae_config(configs["vae"], model_path))
-
-        model_config_path = os.path.join(final_config["model_path"], "config.json")
-        if os.path.exists(model_config_path):
-            try:
-                with open(model_config_path, "r") as f:
-                    model_config = json.load(f)
-                for key, value in model_config.items():
-                    if key not in final_config or final_config[key] is None:
-                        final_config[key] = value
-            except Exception as e:
-                logging.warning(f"Failed to load model config: {e}")
+        # 加载模型配置
+        model_config = self._load_model_config(final_config.get("model_path", ""))
+        for key, value in model_config.items():
+            if key not in final_config or final_config[key] is None:
+                final_config[key] = value
 
         return EasyDict(final_config)

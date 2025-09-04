@@ -23,6 +23,7 @@ from .model_utils import (
     get_model_full_path,
     scan_loras,
     scan_models,
+    support_model_cls_list,
 )
 
 
@@ -30,11 +31,21 @@ class LightX2VInferenceConfig:
     @classmethod
     def INPUT_TYPES(cls):
         available_models = scan_models()
+        support_model_classes = support_model_cls_list()
+        available_attn = get_available_attn_ops()
+        attn_types = []
+
+        for op_name, is_available in available_attn:
+            if is_available:
+                attn_types.append(op_name)
+
+        if "torch_sdpa" not in attn_types:
+            attn_types.append("torch_sdpa")
 
         return {
             "required": {
                 "model_cls": (
-                    ["wan2.1", "wan2.1_audio", "wan2.1_distill", "hunyuan"],
+                    support_model_classes,
                     {"default": "wan2.1", "tooltip": "Model type"},
                 ),
                 "model_name": (
@@ -47,13 +58,13 @@ class LightX2VInferenceConfig:
                 "task": (
                     ["t2v", "i2v"],
                     {
-                        "default": "t2v",
+                        "default": "i2v",
                         "tooltip": "Task type: text-to-video or image-to-video",
                     },
                 ),
                 "infer_steps": (
                     "INT",
-                    {"default": 40, "min": 1, "max": 100, "tooltip": "Inference steps"},
+                    {"default": 4, "min": 1, "max": 100, "tooltip": "Inference steps"},
                 ),
                 "seed": (
                     "INT",
@@ -108,6 +119,10 @@ class LightX2VInferenceConfig:
                         "tooltip": "Video duration in seconds",
                     },
                 ),
+                "attention_type": (
+                    attn_types,
+                    {"default": attn_types[0], "tooltip": "Attention mechanism type"},
+                ),
             },
             "optional": {
                 "denoising_steps": (
@@ -117,11 +132,36 @@ class LightX2VInferenceConfig:
                         "tooltip": "Custom denoising steps for distillation models (comma-separated, e.g., '999,750,500,250'). Leave empty to use model defaults.",
                     },
                 ),
-                "adaptive_resize": (
+                "resize_mode": (
+                    ["adaptive", "keep_ratio_fixed_area", "fixed_min_area", "fixed_max_area", "fixed_shape"],
+                    {
+                        "default": "adaptive",
+                        "tooltip": "Adaptive resize input image to target aspect ratio",
+                    },
+                ),
+                "segment_length": (
+                    "INT",
+                    {
+                        "default": 81,
+                        "min": 16,
+                        "max": 256,
+                        "tooltip": "Segment length in frames for sekotalk models (target_video_length)",
+                    },
+                ),
+                "prev_frame_length": (
+                    "INT",
+                    {
+                        "default": 5,
+                        "min": 0,
+                        "max": 16,
+                        "tooltip": "Previous frame overlap for sekotalk models",
+                    },
+                ),
+                "use_tiny_vae": (
                     "BOOLEAN",
                     {
                         "default": False,
-                        "tooltip": "Adaptive resize input image to target aspect ratio",
+                        "tooltip": "Use lightweight VAE to accelerate decoding",
                     },
                 ),
             },
@@ -144,8 +184,12 @@ class LightX2VInferenceConfig:
         height,
         width,
         duration,
+        attention_type,
         denoising_steps="",
-        adaptive_resize=False,
+        resize_mode="adaptive",
+        segment_length=81,
+        prev_frame_length=5,
+        use_tiny_vae=False,
     ):
         """Create basic inference configuration."""
         model_path = get_model_full_path(model_name)
@@ -158,6 +202,7 @@ class LightX2VInferenceConfig:
         video_length = int(round(duration * fps))
 
         if video_length < 16:
+            logging.warning("Video length is too short, setting to 16")
             video_length = 16
 
         remainder = (video_length - 1) % 4
@@ -166,8 +211,8 @@ class LightX2VInferenceConfig:
 
         # TODO(xxx):
         use_31_block = True
-        if "wan2.1_audio" in [model_cls]:
-            video_length = 81
+        if "seko" in [model_cls]:
+            video_length = segment_length
             use_31_block = False
 
         config = {
@@ -183,9 +228,13 @@ class LightX2VInferenceConfig:
             "video_length": video_length,
             "fps": fps,
             "video_duration": duration,
-            "adaptive_resize": adaptive_resize,
+            "resize_mode": resize_mode,
             "use_31_block": use_31_block,
+            "attention_type": attention_type,
+            "use_tiny_vae": use_tiny_vae,
         }
+        if "seko" in [model_cls]:
+            config["prev_frame_length"] = prev_frame_length
 
         if denoising_steps and denoising_steps.strip():
             try:
@@ -257,35 +306,36 @@ class LightX2VQuantization:
         if not quant_backends:
             quant_backends = ["none"]
 
+        supported_quant_schemes = ["bf16", "fp8", "int8"]
+
         return {
             "required": {
-                "dit_precision": (
-                    ["bf16", "int8", "fp8"],
-                    {"default": "bf16", "tooltip": "DIT model quantization precision"},
-                ),
-                "t5_precision": (
-                    ["bf16", "int8", "fp8"],
-                    {"default": "bf16", "tooltip": "T5 encoder quantization precision"},
-                ),
-                "clip_precision": (
-                    ["fp16", "int8", "fp8"],
-                    {
-                        "default": "fp16",
-                        "tooltip": "CLIP encoder quantization precision",
-                    },
-                ),
-                "quant_backend": (
+                "quant_op": (
                     quant_backends,
                     {
                         "default": quant_backends[0],
                         "tooltip": "Quantization computation backend",
                     },
                 ),
-                "sensitive_layers_precision": (
-                    ["fp32", "bf16"],
+                "dit_quant_scheme": (
+                    supported_quant_schemes,
                     {
-                        "default": "fp32",
-                        "tooltip": "Sensitive layers (normalization and embedding) precision",
+                        "default": supported_quant_schemes[0],
+                        "tooltip": "DIT model quantization precision",
+                    },
+                ),
+                "t5_quant_scheme": (
+                    supported_quant_schemes,
+                    {
+                        "default": supported_quant_schemes[0],
+                        "tooltip": "T5 encoder quantization precision",
+                    },
+                ),
+                "clip_quant_scheme": (
+                    supported_quant_schemes,
+                    {
+                        "default": supported_quant_schemes[0],
+                        "tooltip": "CLIP encoder quantization precision",
                     },
                 ),
             }
@@ -298,19 +348,17 @@ class LightX2VQuantization:
 
     def create_config(
         self,
-        dit_precision,
-        t5_precision,
-        clip_precision,
-        quant_backend,
-        sensitive_layers_precision,
+        quant_op,
+        dit_quant_scheme,
+        t5_quant_scheme,
+        clip_quant_scheme,
     ):
         """Create quantization configuration."""
         config = {
-            "dit_precision": dit_precision,
-            "t5_precision": t5_precision,
-            "clip_precision": clip_precision,
-            "quant_backend": quant_backend,
-            "sensitive_layers_precision": sensitive_layers_precision,
+            "dit_quant_scheme": dit_quant_scheme,
+            "t5_quant_scheme": t5_quant_scheme,
+            "clip_quant_scheme": clip_quant_scheme,
+            "quant_op": quant_op,
         }
         return (config,)
 
@@ -320,16 +368,6 @@ class LightX2VMemoryOptimization:
 
     @classmethod
     def INPUT_TYPES(cls):
-        available_attn = get_available_attn_ops()
-        attn_types = []
-
-        for op_name, is_available in available_attn:
-            if is_available:
-                attn_types.append(op_name)
-
-        if "torch_sdpa" not in attn_types:
-            attn_types.append("torch_sdpa")
-
         return {
             "required": {
                 "optimization_level": (
@@ -338,14 +376,9 @@ class LightX2VMemoryOptimization:
                         "default": "none",
                         "tooltip": "Memory optimization level, higher levels save more memory but may affect speed",
                     },
-                ),
-                "attention_type": (
-                    attn_types,
-                    {"default": attn_types[0], "tooltip": "Attention mechanism type"},
-                ),
+                )
             },
             "optional": {
-                # GPU optimization
                 "enable_rotary_chunk": (
                     "BOOLEAN",
                     {"default": False, "tooltip": "Enable rotary encoding chunking"},
@@ -358,20 +391,42 @@ class LightX2VMemoryOptimization:
                     "BOOLEAN",
                     {"default": False, "tooltip": "Clean CUDA cache promptly"},
                 ),
-                # CPU offloading
-                "enable_cpu_offload": (
+                "cpu_offload": (
                     "BOOLEAN",
-                    {"default": False, "tooltip": "Enable CPU offloading"},
+                    {"default": True, "tooltip": "Enable CPU offloading"},
                 ),
                 "offload_granularity": (
-                    ["block", "phase"],
-                    {"default": "phase", "tooltip": "Offload granularity"},
+                    ["block", "phase", "model"],
+                    {"default": "block", "tooltip": "Offload granularity"},
                 ),
                 "offload_ratio": (
                     "FLOAT",
                     {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.1},
                 ),
-                # Module management
+                "t5_cpu_offload": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Enable T5 CPU offloading"},
+                ),
+                "t5_offload_granularity": (
+                    ["model", "block"],
+                    {"default": "model", "tooltip": "T5 offload granularity"},
+                ),
+                "audio_encoder_cpu_offload": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Enable audio encoder CPU offloading"},
+                ),
+                "audio_adapter_cpu_offload": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Enable audio adapter CPU offloading"},
+                ),
+                "vae_cpu_offload": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Enable VAE CPU offloading"},
+                ),
+                "use_tiling_vae": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Enable VAE tiling inference"},
+                ),
                 "lazy_load": (
                     "BOOLEAN",
                     {"default": False, "tooltip": "Lazy load model"},
@@ -391,62 +446,35 @@ class LightX2VMemoryOptimization:
     def create_config(
         self,
         optimization_level,
-        attention_type,
         enable_rotary_chunk=False,
         rotary_chunk_size=100,
         clean_cuda_cache=False,
-        enable_cpu_offload=False,
+        cpu_offload=False,
         offload_granularity="phase",
         offload_ratio=1.0,
+        t5_cpu_offload=True,
+        t5_offload_granularity="model",
+        audio_encoder_cpu_offload=False,
+        audio_adapter_cpu_offload=False,
+        vae_cpu_offload=False,
         lazy_load=False,
         unload_after_inference=False,
     ):
         config = {
             "optimization_level": optimization_level,
-            "attention_type": attention_type,
             "enable_rotary_chunk": enable_rotary_chunk,
             "rotary_chunk_size": rotary_chunk_size,
             "clean_cuda_cache": clean_cuda_cache,
-            "enable_cpu_offload": enable_cpu_offload,
+            "cpu_offload": cpu_offload,
             "offload_granularity": offload_granularity,
             "offload_ratio": offload_ratio,
+            "t5_cpu_offload": t5_cpu_offload,
+            "t5_offload_granularity": t5_offload_granularity,
+            "audio_encoder_cpu_offload": audio_encoder_cpu_offload,
+            "audio_adapter_cpu_offload": audio_adapter_cpu_offload,
+            "vae_cpu_offload": vae_cpu_offload,
             "lazy_load": lazy_load,
             "unload_after_inference": unload_after_inference,
-        }
-        return (config,)
-
-
-class LightX2VLightweightVAE:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "use_tiny_vae": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                        "tooltip": "Use lightweight VAE to accelerate decoding",
-                    },
-                ),
-                "use_tiling_vae": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                        "tooltip": "Use VAE tiling inference to reduce VRAM usage",
-                    },
-                ),
-            }
-        }
-
-    RETURN_TYPES = ("VAE_CONFIG",)
-    RETURN_NAMES = ("vae_config",)
-    FUNCTION = "create_config"
-    CATEGORY = "LightX2V/Config"
-
-    def create_config(self, use_tiny_vae, use_tiling_vae):
-        config = {
-            "use_tiny_vae": use_tiny_vae,
-            "use_tiling_vae": use_tiling_vae,
         }
         return (config,)
 
@@ -530,7 +558,6 @@ class LightX2VConfigCombiner:
                     "MEMORY_CONFIG",
                     {"tooltip": "Memory optimization configuration"},
                 ),
-                "vae_config": ("VAE_CONFIG", {"tooltip": "VAE configuration"}),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
             },
         }
@@ -546,26 +573,24 @@ class LightX2VConfigCombiner:
         teacache_config=None,
         quantization_config=None,
         memory_config=None,
-        vae_config=None,
         lora_chain=None,
     ):
         configs = {
             "inference": inference_config,
         }
-
         if teacache_config:
             configs["teacache"] = teacache_config
         if quantization_config:
             configs["quantization"] = quantization_config
         if memory_config:
             configs["memory"] = memory_config
-        if vae_config:
-            configs["vae"] = vae_config
 
         config = self.config_manager.build_final_config(configs)
 
         if lora_chain:
             config.lora_configs = lora_chain
+
+        logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
         return (config,)
 
@@ -636,6 +661,8 @@ class LightX2VModularInference:
             os.environ["ENABLE_GRAPH_MODE"] = "false"
         if "ENABLE_PROFILING_DEBUG" not in os.environ:
             os.environ["ENABLE_PROFILING_DEBUG"] = "true"
+        if "SENSITIVE_LAYER_DTYPE" not in os.environ:
+            os.environ["SENSITIVE_LAYER_DTYPE"] = "FP32"
 
         config = combined_config
 
@@ -658,16 +685,8 @@ class LightX2VModularInference:
                     temp_files.append(tmp.name)
                 logging.info(f"Image saved to {tmp.name}")
 
-            if (
-                audio is not None
-                and hasattr(config, "model_cls")
-                and "audio" in config.model_cls
-            ):
-                if (
-                    isinstance(audio, dict)
-                    and "waveform" in audio
-                    and "sample_rate" in audio
-                ):
+            if audio is not None and hasattr(config, "model_cls") and "audio" in config.model_cls:
+                if isinstance(audio, dict) and "waveform" in audio and "sample_rate" in audio:
                     waveform = audio["waveform"]
                     sample_rate = audio["sample_rate"]
 
@@ -694,9 +713,7 @@ class LightX2VModularInference:
                         import wave
 
                         with wave.open(tmp.name, "wb") as wav_file:
-                            wav_file.setnchannels(
-                                1 if waveform.ndim == 1 else waveform.shape[-1]
-                            )
+                            wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
                             wav_file.setsampwidth(2)  # 16-bit
                             wav_file.setframerate(sample_rate)
                             if waveform.dtype != np.int16:
@@ -716,11 +733,7 @@ class LightX2VModularInference:
                     logging.info(f"Audio saved to {tmp.name}")
 
             config_hash = self._get_config_hash(config)
-            needs_reinit = (
-                self._current_runner is None
-                or self._current_config_hash != config_hash
-                or getattr(config, "lazy_load", False)
-            )
+            needs_reinit = self._current_runner is None or self._current_config_hash != config_hash or getattr(config, "lazy_load", False)
 
             if needs_reinit:
                 if self._current_runner is not None:
@@ -772,7 +785,6 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VTeaCache": LightX2VTeaCache,
     "LightX2VQuantization": LightX2VQuantization,
     "LightX2VMemoryOptimization": LightX2VMemoryOptimization,
-    "LightX2VLightweightVAE": LightX2VLightweightVAE,
     "LightX2VLoRALoader": LightX2VLoRALoader,
     "LightX2VConfigCombiner": LightX2VConfigCombiner,
     "LightX2VModularInference": LightX2VModularInference,
@@ -783,7 +795,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VTeaCache": "LightX2V TeaCache",
     "LightX2VQuantization": "LightX2V Quantization",
     "LightX2VMemoryOptimization": "LightX2V Memory Optimization",
-    "LightX2VLightweightVAE": "LightX2V Lightweight VAE",
     "LightX2VLoRALoader": "LightX2V LoRA Loader",
     "LightX2VConfigCombiner": "LightX2V Config Combiner",
     "LightX2VModularInference": "LightX2V Modular Inference",
