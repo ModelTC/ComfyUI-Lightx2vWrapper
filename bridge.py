@@ -76,7 +76,7 @@ class LightX2VDefaultConfig:
 
     # 分组常量
     DEFAULT_ATTENTION_TYPE = "flash_attn3"
-    DEFAULT_QUANTIZATION_SCHEMES = {"dit": "bf16", "t5": "bf16", "clip": "fp16"}
+    DEFAULT_QUANTIZATION_SCHEMES = {"dit": "bf16", "t5": "bf16", "clip": "fp16", "adapter": "bf16"}
     DEFAULT_VIDEO_PARAMS = {"height": 480, "width": 832, "length": 81, "fps": 16, "vae_stride": [4, 8, 8], "patch_size": [1, 2, 2]}
 
     DEFAULT_CONFIG = {
@@ -84,7 +84,6 @@ class LightX2VDefaultConfig:
         "model_cls": "wan2.1",
         "model_path": "",
         "task": "t2v",
-        "mode": "infer",
         # Inference Parameters
         "infer_steps": 40,
         "seed": 42,
@@ -109,47 +108,36 @@ class LightX2VDefaultConfig:
         "dit_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["dit"],
         "t5_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["t5"],
         "clip_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["clip"],
-        "quant_op": "vllm",
-        "precision_mode": "fp32",
-        "dit_quantized_ckpt": None,
-        "t5_quantized_ckpt": None,
-        "clip_quantized_ckpt": None,
+        "adapter_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["adapter"],
         "mm_config": {"mm_type": "Default"},
         # Memory Optimization
         "rotary_chunk": False,
         "rotary_chunk_size": 100,
         "clean_cuda_cache": False,
         "torch_compile": False,
-        "attention_type": DEFAULT_ATTENTION_TYPE,
         "self_attn_1_type": DEFAULT_ATTENTION_TYPE,
         "cross_attn_1_type": DEFAULT_ATTENTION_TYPE,
         "cross_attn_2_type": DEFAULT_ATTENTION_TYPE,
         # CPU Offloading
         "cpu_offload": False,
-        "offload_granularity": "phase",
+        "offload_granularity": "block",
         "offload_ratio": 1.0,
         "t5_cpu_offload": False,
         "t5_offload_granularity": "model",
         "lazy_load": False,
         "unload_modules": False,
         # VAE Settings
-        "use_tiny_vae": False,
-        "tiny_vae": False,
-        "tiny_vae_path": None,
         "use_tiling_vae": False,
         # Other Settings
-        "lora_path": None,
-        "strength_model": 1.0,
         "do_mm_calib": False,
-        "parallel_attn_type": None,
-        "parallel_vae": False,
-        "parallel": False,
-        "seq_parallel": False,
-        "cfg_parallel": False,
         "max_area": False,
         "use_prompt_enhancer": False,
         "text_len": 512,
         "use_31_block": True,
+        "parallel": False,
+        "seq_parallel": False,
+        "cfg_parallel": False,
+        "audio_sr": 16000,
     }
 
 
@@ -308,6 +296,7 @@ class ModularConfigManager:
             "denoising_step_list": "denoising_step_list",
             "use_31_block": "use_31_block",
             "prev_frame_length": "prev_frame_length",
+            "fixed_area": "fixed_area",
         }
 
         self._update_from_config(updates, config, basic_mappings)
@@ -370,45 +359,36 @@ class ModularConfigManager:
         else:
             return "Default"
 
-    def apply_quantization_config(self, config: Dict[str, Any], model_path: str) -> Dict[str, Any]:
+    def apply_quantization_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Apply quantization configuration."""
         updates = {}
         defaults = LightX2VDefaultConfig.DEFAULT_QUANTIZATION_SCHEMES
+
+        print("config", config)
 
         # 获取量化方案
         dit_scheme = config.get("dit_quant_scheme", defaults["dit"])
         t5_scheme = config.get("t5_quant_scheme", defaults["t5"])
         clip_scheme = config.get("clip_quant_scheme", defaults["clip"])
+        adapter_scheme = config.get("adapter_quant_scheme", defaults["adapter"])
         quant_backend = config.get("quant_op", "vllm")
 
         updates.update(
             {
-                "dit_quant_scheme": dit_scheme,
-                "t5_quant_scheme": t5_scheme,
-                "clip_quant_scheme": clip_scheme,
-                "t5_quantized": t5_scheme != defaults["t5"],
                 "clip_quantized": clip_scheme != defaults["clip"],
+                "clip_quant_scheme": clip_scheme,
+                "t5_quant_scheme": t5_scheme,
+                "t5_quantized": t5_scheme != defaults["t5"],
+                "adapter_quantized": adapter_scheme != defaults["adapter"],
+                "adapter_quant_scheme": adapter_scheme,
             }
         )
 
-        # 设置检查点路径
-        if dit_scheme != defaults["dit"]:
-            updates["dit_quantized_ckpt"] = os.path.join(model_path, dit_scheme)
+        if updates.get("t5_quantized") and quant_backend == "q8f":
+            updates["t5_quant_scheme"] = f"{t5_scheme}-q8f"
+        if updates.get("clip_quantized") and quant_backend == "q8f":
+            updates["clip_quant_scheme"] = f"{clip_scheme}-q8f"
 
-        if t5_scheme != defaults["t5"]:
-            t5_path = os.path.join(model_path, t5_scheme)
-            updates["t5_quantized_ckpt"] = os.path.join(t5_path, f"models_t5_umt5-xxl-enc-{t5_scheme}.pth")
-
-        if clip_scheme != defaults["clip"]:
-            clip_path = os.path.join(model_path, clip_scheme)
-            updates["clip_quantized_ckpt"] = os.path.join(clip_path, f"clip-{clip_scheme}.pth")
-
-        # 特殊后端处理
-        if quant_backend in ["q8f", "torchao"]:
-            backend_suffix = f"int8-{quant_backend}"
-            updates.update({"t5_quant_scheme": backend_suffix, "clip_quant_scheme": backend_suffix})
-
-        # 设置mm_config
         mm_type = self._get_mm_type(dit_scheme, quant_backend)
         updates["mm_config"] = {"mm_type": mm_type}
 
@@ -417,47 +397,32 @@ class ModularConfigManager:
     def apply_memory_optimization(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Apply memory optimization settings."""
         updates = {}
-        level = config.get("optimization_level", "none")
-
-        # 级别映射配置
-        level_configs = {
-            "medium": {"cpu_offload": True},
-            "high": {"cpu_offload": True, "rotary_chunk": True, "t5_cpu_offload": True, "t5_offload_granularity": "model"},
-            "extreme": {
-                "cpu_offload": True,
-                "rotary_chunk": True,
-                "clean_cuda_cache": True,
-                "t5_cpu_offload": True,
-                "t5_offload_granularity": "block",
-                "lazy_load": True,
-                "unload_modules": True,
-            },
-        }
-
-        # 应用级别配置
-        if level in level_configs:
-            updates.update(level_configs[level])
 
         # 直接配置项映射
         direct_mappings = {
             "enable_rotary_chunk": "rotary_chunk",
             "clean_cuda_cache": "clean_cuda_cache",
             "cpu_offload": "cpu_offload",
+            "t5_cpu_offload": "t5_cpu_offload",
+            "vae_cpu_offload": "vae_cpu_offload",
+            "audio_encoder_cpu_offload": "audio_encoder_cpu_offload",
+            "audio_adapter_cpu_offload": "audio_adapter_cpu_offload",
             "lazy_load": "lazy_load",
             "unload_after_inference": "unload_modules",
             "use_tiling_vae": "use_tiling_vae",
         }
 
         for config_key, update_key in direct_mappings.items():
-            if config.get(config_key, False):
-                updates[update_key] = True
+            updates[update_key] = config.get(config_key, config.get("cpu_offload", False))
 
-        # 附加配置
         if updates.get("rotary_chunk"):
             updates["rotary_chunk_size"] = config.get("rotary_chunk_size", 100)
 
         if updates.get("cpu_offload"):
             updates.update({"offload_granularity": config.get("offload_granularity", "phase"), "offload_ratio": config.get("offload_ratio", 1.0)})
+
+        if updates.get("t5_cpu_offload"):
+            updates["t5_offload_granularity"] = config.get("t5_offload_granularity", "model")
 
         return updates
 
@@ -478,24 +443,24 @@ class ModularConfigManager:
         """Build final configuration from module configs."""
         final_config = copy.deepcopy(self.base_config)
 
-        # 应用配置模块
-        config_modules = [("inference", self.apply_inference_config), ("memory", self.apply_memory_optimization)]
+        config_modules = [("inference", self.apply_inference_config)]
 
         for module_name, apply_func in config_modules:
             if module_name in configs:
                 final_config.update(apply_func(configs[module_name]))
 
-        # 特殊处理的模块
+        if "memory" in configs:
+            memory_updates = self.apply_memory_optimization(configs["memory"])
+            final_config.update(memory_updates)
+
         if "teacache" in configs:
             teacache_updates = self.apply_teacache_config(configs["teacache"], final_config)
             final_config.update(teacache_updates)
 
         if "quantization" in configs:
-            model_path = final_config.get("model_path", "")
-            quant_updates = self.apply_quantization_config(configs["quantization"], model_path)
+            quant_updates = self.apply_quantization_config(configs["quantization"])
             final_config.update(quant_updates)
 
-        # 加载模型配置
         model_config = self._load_model_config(final_config.get("model_path", ""))
         for key, value in model_config.items():
             if key not in final_config or final_config[key] is None:

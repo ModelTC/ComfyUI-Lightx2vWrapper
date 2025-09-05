@@ -139,6 +139,13 @@ class LightX2VInferenceConfig:
                         "tooltip": "Adaptive resize input image to target aspect ratio",
                     },
                 ),
+                "fixed_area": (
+                    "STRING",
+                    {
+                        "default": "720p",
+                        "tooltip": "Fixed shape for input image, e.g., '720p', '480p', when resize_mode is 'keep_ratio_fixed_area'",
+                    },
+                ),
                 "segment_length": (
                     "INT",
                     {
@@ -187,6 +194,7 @@ class LightX2VInferenceConfig:
         attention_type,
         denoising_steps="",
         resize_mode="adaptive",
+        fixed_area="720p",
         segment_length=81,
         prev_frame_length=5,
         use_tiny_vae=False,
@@ -211,7 +219,7 @@ class LightX2VInferenceConfig:
 
         # TODO(xxx):
         use_31_block = True
-        if "seko" in [model_cls]:
+        if "seko" in model_cls:
             video_length = segment_length
             use_31_block = False
 
@@ -229,6 +237,7 @@ class LightX2VInferenceConfig:
             "fps": fps,
             "video_duration": duration,
             "resize_mode": resize_mode,
+            "fixed_area": fixed_area,
             "use_31_block": use_31_block,
             "attention_type": attention_type,
             "use_tiny_vae": use_tiny_vae,
@@ -306,7 +315,7 @@ class LightX2VQuantization:
         if not quant_backends:
             quant_backends = ["none"]
 
-        supported_quant_schemes = ["bf16", "fp8", "int8"]
+        supported_quant_schemes = ["bf16", "fp16", "fp8", "int8"]
 
         return {
             "required": {
@@ -334,8 +343,15 @@ class LightX2VQuantization:
                 "clip_quant_scheme": (
                     supported_quant_schemes,
                     {
-                        "default": supported_quant_schemes[0],
+                        "default": supported_quant_schemes[1],
                         "tooltip": "CLIP encoder quantization precision",
+                    },
+                ),
+                "adapter_quant_scheme": (
+                    supported_quant_schemes,
+                    {
+                        "default": supported_quant_schemes[0],
+                        "tooltip": "Adapter quantization precision",
                     },
                 ),
             }
@@ -352,12 +368,14 @@ class LightX2VQuantization:
         dit_quant_scheme,
         t5_quant_scheme,
         clip_quant_scheme,
+        adapter_quant_scheme,
     ):
         """Create quantization configuration."""
         config = {
             "dit_quant_scheme": dit_quant_scheme,
             "t5_quant_scheme": t5_quant_scheme,
             "clip_quant_scheme": clip_quant_scheme,
+            "adapter_quant_scheme": adapter_quant_scheme,
             "quant_op": quant_op,
         }
         return (config,)
@@ -370,15 +388,6 @@ class LightX2VMemoryOptimization:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "optimization_level": (
-                    ["none", "low", "medium", "high", "extreme"],
-                    {
-                        "default": "none",
-                        "tooltip": "Memory optimization level, higher levels save more memory but may affect speed",
-                    },
-                )
-            },
-            "optional": {
                 "enable_rotary_chunk": (
                     "BOOLEAN",
                     {"default": False, "tooltip": "Enable rotary encoding chunking"},
@@ -445,7 +454,6 @@ class LightX2VMemoryOptimization:
 
     def create_config(
         self,
-        optimization_level,
         enable_rotary_chunk=False,
         rotary_chunk_size=100,
         clean_cuda_cache=False,
@@ -457,11 +465,11 @@ class LightX2VMemoryOptimization:
         audio_encoder_cpu_offload=False,
         audio_adapter_cpu_offload=False,
         vae_cpu_offload=False,
+        use_tiling_vae=False,
         lazy_load=False,
         unload_after_inference=False,
     ):
         config = {
-            "optimization_level": optimization_level,
             "enable_rotary_chunk": enable_rotary_chunk,
             "rotary_chunk_size": rotary_chunk_size,
             "clean_cuda_cache": clean_cuda_cache,
@@ -473,6 +481,7 @@ class LightX2VMemoryOptimization:
             "audio_encoder_cpu_offload": audio_encoder_cpu_offload,
             "audio_adapter_cpu_offload": audio_adapter_cpu_offload,
             "vae_cpu_offload": vae_cpu_offload,
+            "use_tiling_vae": use_tiling_vae,
             "lazy_load": lazy_load,
             "unload_after_inference": unload_after_inference,
         }
@@ -654,16 +663,6 @@ class LightX2VModularInference:
         audio=None,
         **kwargs,
     ):
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        if "DTYPE" not in os.environ:
-            os.environ["DTYPE"] = "BF16"
-        if "ENABLE_GRAPH_MODE" not in os.environ:
-            os.environ["ENABLE_GRAPH_MODE"] = "false"
-        if "ENABLE_PROFILING_DEBUG" not in os.environ:
-            os.environ["ENABLE_PROFILING_DEBUG"] = "true"
-        if "SENSITIVE_LAYER_DTYPE" not in os.environ:
-            os.environ["SENSITIVE_LAYER_DTYPE"] = "FP32"
-
         config = combined_config
 
         config.prompt = prompt
@@ -685,7 +684,7 @@ class LightX2VModularInference:
                     temp_files.append(tmp.name)
                 logging.info(f"Image saved to {tmp.name}")
 
-            if audio is not None and hasattr(config, "model_cls") and "audio" in config.model_cls:
+            if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
                 if isinstance(audio, dict) and "waveform" in audio and "sample_rate" in audio:
                     waveform = audio["waveform"]
                     sample_rate = audio["sample_rate"]
@@ -755,7 +754,9 @@ class LightX2VModularInference:
             if hasattr(self._current_runner, "set_progress_callback"):
                 self._current_runner.set_progress_callback(update_progress)
 
-            images, audio = self._current_runner.run_pipeline(save_video=False)
+            result_dict = self._current_runner.run_pipeline(save_video=False)
+            images = result_dict.get("video", None)
+            audio = result_dict.get("audio", None)
 
             if getattr(config, "unload_after_inference", False):
                 del self._current_runner

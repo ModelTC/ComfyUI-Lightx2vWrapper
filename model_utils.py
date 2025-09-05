@@ -29,7 +29,7 @@ def scan_models() -> List[str]:
     return ["None"] + models if models else ["None"]
 
 
-def support_model_cls_list(model_cls: str) -> List[str]:
+def support_model_cls_list() -> List[str]:
     return [
         "wan2.1",
         "wan2.1_distill",
