@@ -85,6 +85,16 @@ class LightX2VInferenceConfig:
                         "tooltip": "CFG guidance strength",
                     },
                 ),
+                "cfg_scale2": (
+                    "FLOAT",
+                    {
+                        "default": 5.0,
+                        "min": 1.0,
+                        "max": 10.0,
+                        "step": 0.1,
+                        "tooltip": "CFG guidance, lower noise when model cls is Wan2.2 MoE",
+                    },
+                ),
                 "sample_shift": (
                     "INT",
                     {"default": 5, "min": 0, "max": 10, "tooltip": "Sample shift"},
@@ -133,7 +143,7 @@ class LightX2VInferenceConfig:
                     },
                 ),
                 "resize_mode": (
-                    ["adaptive", "keep_ratio_fixed_area", "fixed_min_area", "fixed_max_area", "fixed_shape"],
+                    ["adaptive", "keep_ratio_fixed_area", "fixed_min_area", "fixed_max_area", "fixed_shape", "fixed_min_side"],
                     {
                         "default": "adaptive",
                         "tooltip": "Adaptive resize input image to target aspect ratio",
@@ -143,7 +153,7 @@ class LightX2VInferenceConfig:
                     "STRING",
                     {
                         "default": "720p",
-                        "tooltip": "Fixed shape for input image, e.g., '720p', '480p', when resize_mode is 'keep_ratio_fixed_area'",
+                        "tooltip": "Fixed shape for input image, e.g., '720p', '480p', when resize_mode is 'keep_ratio_fixed_area' or 'fixed_min_side'",
                     },
                 ),
                 "segment_length": (
@@ -187,6 +197,7 @@ class LightX2VInferenceConfig:
         infer_steps,
         seed,
         cfg_scale,
+        cfg_scale2,
         sample_shift,
         height,
         width,
@@ -230,6 +241,7 @@ class LightX2VInferenceConfig:
             "infer_steps": infer_steps,
             "seed": seed if seed != -1 else np.random.randint(0, 2**32 - 1),
             "cfg_scale": cfg_scale,
+            "cfg_scale2": cfg_scale2,
             "sample_shift": sample_shift,
             "height": height,
             "width": width,

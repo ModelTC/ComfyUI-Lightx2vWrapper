@@ -105,7 +105,6 @@ class LightX2VDefaultConfig:
         "coefficients": None,
         "use_ret_steps": False,
         # Quantization
-        "dit_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["dit"],
         "t5_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["t5"],
         "clip_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["clip"],
         "adapter_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["adapter"],
@@ -301,12 +300,16 @@ class ModularConfigManager:
 
         self._update_from_config(updates, config, basic_mappings)
 
-        # CFG特殊处理
         if "cfg_scale" in config:
             updates["sample_guide_scale"] = config["cfg_scale"]
             updates["enable_cfg"] = config["cfg_scale"] != 1.0
 
-        # 注意力类型配置
+        if config["model_cls"] == "wan2.2_moe":
+            updates["sample_guide_scale"] = [config["cfg_scale2"], config["cfg_scale2"]]
+            updates["boundary"] = 0.9
+        if "wan2.2" in config["model_cls"]:
+            updates["use_image_encoder"] = False
+
         attention_type = config.get("attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE)
         for attn_key in ["attention_type", "self_attn_1_type", "cross_attn_1_type", "cross_attn_2_type"]:
             updates[attn_key] = attention_type
@@ -364,9 +367,6 @@ class ModularConfigManager:
         updates = {}
         defaults = LightX2VDefaultConfig.DEFAULT_QUANTIZATION_SCHEMES
 
-        print("config", config)
-
-        # 获取量化方案
         dit_scheme = config.get("dit_quant_scheme", defaults["dit"])
         t5_scheme = config.get("t5_quant_scheme", defaults["t5"])
         clip_scheme = config.get("clip_quant_scheme", defaults["clip"])
@@ -398,7 +398,6 @@ class ModularConfigManager:
         """Apply memory optimization settings."""
         updates = {}
 
-        # 直接配置项映射
         direct_mappings = {
             "enable_rotary_chunk": "rotary_chunk",
             "clean_cuda_cache": "clean_cuda_cache",

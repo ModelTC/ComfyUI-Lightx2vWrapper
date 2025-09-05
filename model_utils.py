@@ -45,16 +45,26 @@ def support_model_cls_list() -> List[str]:
     ]
 
 
-def scan_loras() -> List[str]:
+def get_loras_models(model_path: Path) -> List[str]:
     loras = []
-    base_path = get_model_base_path()
-    loras_path = base_path / "loras"
-
-    if loras_path.exists():
-        for item in loras_path.iterdir():
+    if model_path.exists():
+        for item in model_path.iterdir():
             if item.is_file():
                 if item.suffix.lower() in [".safetensors", ".pt", ".pth", ".ckpt"]:
                     loras.append(item.name)
+    return loras
+
+
+def scan_loras() -> List[str]:
+    base_path = get_model_base_path()
+    loras_path = base_path / "loras"
+    loras = get_loras_models(loras_path)
+
+    models_base = folder_paths.models_dir
+    loras_path = Path(models_base) / "loras"
+
+    loras2 = get_loras_models(loras_path)
+    loras.extend(loras2)
 
     loras.sort()
 
@@ -82,6 +92,13 @@ def get_lora_full_path(lora_name: str) -> str:
 
     if lora_path.exists():
         return str(lora_path)
+
+    models_base = folder_paths.models_dir
+    loras_path = Path(models_base) / "loras" / lora_name
+
+    if loras_path.exists():
+        return str(loras_path)
+
     return ""
 
 
