@@ -656,11 +656,36 @@ class LightX2VModularInference:
         relevant_configs = {
             "model_cls": getattr(config, "model_cls", None),
             "model_path": getattr(config, "model_path", None),
-            "dit_quantized": getattr(config, "dit_quantized", False),
+            "task": getattr(config, "task", None),
             "t5_quantized": getattr(config, "t5_quantized", False),
             "clip_quantized": getattr(config, "clip_quantized", False),
             "lora_configs": getattr(config, "lora_configs", None),
-            "lazy_load": getattr(config, "lazy_load", False),
+            "mm_config": getattr(config, "mm_config", None),
+            "cross_attn_1_type": getattr(config, "cross_attn_1_type", None),
+            "cross_attn_2_type": getattr(config, "cross_attn_2_type", None),
+            "self_attn_1_type": getattr(config, "self_attn_1_type", None),
+            "self_attn_2_type": getattr(config, "self_attn_2_type", None),
+            "cpu_offload": getattr(config, "cpu_offload", False),
+            "offload_granularity": getattr(config, "offload_granularity", None),
+            "offload_ratio": getattr(config, "offload_ratio", None),
+            "t5_cpu_offload": getattr(config, "t5_cpu_offload", False),
+            "t5_offload_granularity": getattr(config, "t5_offload_granularity", None),
+            "audio_encoder_cpu_offload": getattr(config, "audio_encoder_cpu_offload", False),
+            "audio_adapter_cpu_offload": getattr(config, "audio_adapter_cpu_offload", False),
+            "vae_cpu_offload": getattr(config, "vae_cpu_offload", False),
+            "use_tiling_vae": getattr(config, "use_tiling_vae", False),
+            "unload_after_inference": getattr(config, "unload_after_inference", False),
+            "enable_rotary_chunk": getattr(config, "enable_rotary_chunk", False),
+            "rotary_chunk_size": getattr(config, "rotary_chunk_size", None),
+            "clean_cuda_cache": getattr(config, "clean_cuda_cache", False),
+            "torch_compile": getattr(config, "torch_compile", False),
+            "threshold": getattr(config, "threshold", None),
+            "use_ret_steps": getattr(config, "use_ret_steps", False),
+            "t5_quant_scheme": getattr(config, "t5_quant_scheme", None),
+            "clip_quant_scheme": getattr(config, "clip_quant_scheme", None),
+            "adapter_quant_scheme": getattr(config, "adapter_quant_scheme", None),
+            "adapter_quantized": getattr(config, "adapter_quantized", False),
+            "feature_caching": getattr(config, "feature_caching", None),
         }
 
         config_str = json.dumps(relevant_configs, sort_keys=True)
@@ -747,6 +772,7 @@ class LightX2VModularInference:
             needs_reinit = self._current_runner is None or self._current_config_hash != config_hash or getattr(config, "lazy_load", False)
 
             if needs_reinit:
+                logging.info(f"Reinitializing runner, old config hash: {self._current_config_hash}, new config hash: {config_hash}")
                 if self._current_runner is not None:
                     del self._current_runner
                     torch.cuda.empty_cache()
