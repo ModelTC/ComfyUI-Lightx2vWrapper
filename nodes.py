@@ -771,8 +771,8 @@ class LightX2VModularInference:
             config_hash = self._get_config_hash(config)
             needs_reinit = self._current_runner is None or self._current_config_hash != config_hash or getattr(config, "lazy_load", False)
 
+            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {self._current_config_hash}, new config hash: {config_hash}")
             if needs_reinit:
-                logging.info(f"Reinitializing runner, old config hash: {self._current_config_hash}, new config hash: {config_hash}")
                 if self._current_runner is not None:
                     del self._current_runner
                     torch.cuda.empty_cache()
