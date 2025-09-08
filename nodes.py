@@ -617,9 +617,12 @@ class LightX2VConfigCombiner:
 
 
 class LightX2VModularInference:
+    # 类变量，所有实例共享
+    _current_runner = None
+    _current_config_hash = None
+
     def __init__(self):
-        self._current_runner = None
-        self._current_config_hash = None
+        pass
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -769,37 +772,40 @@ class LightX2VModularInference:
                     logging.info(f"Audio saved to {tmp.name}")
 
             config_hash = self._get_config_hash(config)
-            needs_reinit = self._current_runner is None or self._current_config_hash != config_hash or getattr(config, "lazy_load", False)
+            needs_reinit = (
+                self.__class__._current_runner is None or self.__class__._current_config_hash != config_hash or getattr(config, "lazy_load", False)
+            )
 
-            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {self._current_config_hash}, new config hash: {config_hash}")
+            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {self.__class__._current_config_hash}, new config hash: {config_hash}")
             if needs_reinit:
-                if self._current_runner is not None:
-                    del self._current_runner
+                if self.__class__._current_runner is not None:
+                    self.__class__._current_runner.end_run()
+                    del self.__class__._current_runner
                     torch.cuda.empty_cache()
                     gc.collect()
 
-                self._current_runner = init_runner(config)
-                self._current_config_hash = config_hash
+                self.__class__._current_runner = init_runner(config)
+                self.__class__._current_config_hash = config_hash
             else:
-                if hasattr(self._current_runner, "config"):
-                    self._current_runner.config = config
+                if hasattr(self.__class__._current_runner, "config"):
+                    self.__class__._current_runner.config = config
 
             progress = ProgressBar(100)
 
             def update_progress(current_step, total):
                 progress.update_absolute(current_step)
 
-            if hasattr(self._current_runner, "set_progress_callback"):
-                self._current_runner.set_progress_callback(update_progress)
+            if hasattr(self.__class__._current_runner, "set_progress_callback"):
+                self.__class__._current_runner.set_progress_callback(update_progress)
 
-            result_dict = self._current_runner.run_pipeline(save_video=False)
+            result_dict = self.__class__._current_runner.run_pipeline(save_video=False)
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
 
             if getattr(config, "unload_after_inference", False):
-                del self._current_runner
-                self._current_runner = None
-                self._current_config_hash = None
+                del self.__class__._current_runner
+                self.__class__._current_runner = None
+                self.__class__._current_config_hash = None
 
             torch.cuda.empty_cache()
             gc.collect()
