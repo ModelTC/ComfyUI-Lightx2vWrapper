@@ -553,6 +553,96 @@ class LightX2VLoRALoader:
         return (lora_chain,)
 
 
+class TalkObjectInput:
+    """单个谈话对象（音频+遮罩）输入节点"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "audio_source": (["upload", "url"], {"default": "upload", "tooltip": "音频输入方式"}),
+                "mask_source": (["upload", "url", "none"], {"default": "upload", "tooltip": "遮罩输入方式"}),
+            },
+            "optional": {
+                "audio": ("AUDIO", {"tooltip": "上传的音频文件"}),
+                "audio_url": ("STRING", {"default": "", "tooltip": "音频文件URL路径"}),
+                "mask": ("MASK", {"tooltip": "上传的遮罩图像"}),
+                "mask_url": ("STRING", {"default": "", "tooltip": "遮罩图像URL路径"}),
+            },
+        }
+
+    RETURN_TYPES = ("TALK_OBJECT",)
+    RETURN_NAMES = ("talk_object",)
+    FUNCTION = "create_talk_object"
+    CATEGORY = "LightX2V/Audio"
+
+    def create_talk_object(self, audio_source, mask_source, audio=None, audio_url="", mask=None, mask_url=""):
+        """创建单个谈话对象配置"""
+        talk_object = {}
+
+        # 处理音频
+        if audio_source == "upload" and audio is not None:
+            # 音频将在推理时转换为临时文件
+            talk_object["audio_data"] = audio
+            talk_object["audio_type"] = "upload"
+        elif audio_source == "url" and audio_url:
+            talk_object["audio"] = audio_url
+            talk_object["audio_type"] = "url"
+        else:
+            return (None,)  # 无效的音频输入
+
+        # 处理遮罩
+        if mask_source == "upload" and mask is not None:
+            talk_object["mask_data"] = mask
+            talk_object["mask_type"] = "upload"
+        elif mask_source == "url" and mask_url:
+            talk_object["mask"] = mask_url
+            talk_object["mask_type"] = "url"
+        elif mask_source == "none":
+            # 不使用遮罩
+            talk_object["mask"] = None
+            talk_object["mask_type"] = "none"
+
+        return (talk_object,)
+
+
+class TalkObjectsBuilder:
+    """构建多人对话配置的节点"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "number": ("INT", {"default": 1, "min": 0, "max": 10, "tooltip": "谈话对象数量，0表示无，1表示单人，2+表示多人"}),
+            },
+            "optional": {
+                # 支持最多10个谈话对象
+                **{f"talk_object_{i}": ("TALK_OBJECT",) for i in range(1, 11)}
+            },
+        }
+
+    RETURN_TYPES = ("TALK_OBJECTS_CONFIG",)
+    RETURN_NAMES = ("talk_objects_config",)
+    FUNCTION = "build_talk_objects"
+    CATEGORY = "LightX2V/Audio"
+
+    def build_talk_objects(self, number, **kwargs):
+        """构建谈话对象列表"""
+        if number == 0:
+            return (None,)
+
+        talk_objects = []
+        for i in range(1, number + 1):
+            talk_obj = kwargs.get(f"talk_object_{i}")
+            if talk_obj is not None:
+                talk_objects.append(talk_obj)
+
+        if not talk_objects:
+            return (None,)
+
+        return ({"talk_objects": talk_objects},)
+
+
 class LightX2VConfigCombiner:
     def __init__(self):
         self.config_manager = ModularConfigManager()
@@ -580,6 +670,7 @@ class LightX2VConfigCombiner:
                     {"tooltip": "Memory optimization configuration"},
                 ),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
+                "talk_objects_config": ("TALK_OBJECTS_CONFIG", {"tooltip": "Multi-person talk objects configuration"}),
             },
         }
 
@@ -595,6 +686,7 @@ class LightX2VConfigCombiner:
         quantization_config=None,
         memory_config=None,
         lora_chain=None,
+        talk_objects_config=None,
     ):
         configs = {
             "inference": inference_config,
@@ -610,6 +702,9 @@ class LightX2VConfigCombiner:
 
         if lora_chain:
             config.lora_configs = lora_chain
+
+        if talk_objects_config:
+            config.talk_objects_config = talk_objects_config
 
         logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
@@ -771,6 +866,89 @@ class LightX2VModularInference:
 
                     logging.info(f"Audio saved to {tmp.name}")
 
+            # 处理多人对话对象
+            if hasattr(config, "talk_objects_config") and config.talk_objects_config:
+                talk_objects = config.talk_objects_config.get("talk_objects", [])
+                processed_talk_objects = []
+
+                for talk_obj in talk_objects:
+                    processed_obj = {}
+
+                    # 处理音频
+                    if talk_obj.get("audio_type") == "upload" and "audio_data" in talk_obj:
+                        audio_data = talk_obj["audio_data"]
+
+                        # 处理音频数据，转换为临时文件
+                        if isinstance(audio_data, dict) and "waveform" in audio_data and "sample_rate" in audio_data:
+                            waveform = audio_data["waveform"]
+                            sample_rate = audio_data["sample_rate"]
+
+                            if isinstance(waveform, torch.Tensor):
+                                if waveform.dim() == 3:
+                                    waveform = waveform[0]
+                                if waveform.dim() == 2:
+                                    waveform = waveform.transpose(0, 1)
+                                waveform = waveform.cpu().numpy()
+
+                            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                                try:
+                                    import scipy.io.wavfile as wavfile
+
+                                    if waveform.ndim == 1:
+                                        wavfile.write(tmp.name, sample_rate, waveform)
+                                    else:
+                                        if waveform.shape[0] < waveform.shape[1]:
+                                            waveform = waveform.T
+                                        wavfile.write(tmp.name, sample_rate, waveform)
+                                except ImportError:
+                                    import wave
+
+                                    with wave.open(tmp.name, "wb") as wav_file:
+                                        wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
+                                        wav_file.setsampwidth(2)
+                                        wav_file.setframerate(sample_rate)
+                                        if waveform.dtype != np.int16:
+                                            waveform = (waveform * 32767).astype(np.int16)
+                                        wav_file.writeframes(waveform.tobytes())
+
+                                processed_obj["audio"] = tmp.name
+                                temp_files.append(tmp.name)
+                                logging.info(f"Talk object audio saved to {tmp.name}")
+                    elif talk_obj.get("audio_type") == "url":
+                        processed_obj["audio"] = talk_obj.get("audio")
+
+                    # 处理遮罩
+                    if talk_obj.get("mask_type") == "upload" and "mask_data" in talk_obj:
+                        mask_data = talk_obj["mask_data"]
+
+                        # 假设 mask_data 是一个 tensor 或 numpy array
+                        if isinstance(mask_data, torch.Tensor):
+                            mask_np = (mask_data[0].cpu().numpy() * 255).astype(np.uint8)
+                        elif isinstance(mask_data, np.ndarray):
+                            mask_np = (mask_data * 255).astype(np.uint8)
+                        else:
+                            mask_np = mask_data
+
+                        mask_image = Image.fromarray(mask_np)
+
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                            mask_image.save(tmp.name)
+                            processed_obj["mask"] = tmp.name
+                            temp_files.append(tmp.name)
+                            logging.info(f"Talk object mask saved to {tmp.name}")
+                    elif talk_obj.get("mask_type") == "url":
+                        processed_obj["mask"] = talk_obj.get("mask")
+                    elif talk_obj.get("mask_type") == "none":
+                        processed_obj["mask"] = None
+
+                    if "audio" in processed_obj:
+                        processed_talk_objects.append(processed_obj)
+
+                # 设置 talk_objects 到 config
+                if processed_talk_objects:
+                    config.talk_objects = processed_talk_objects
+                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+
             config_hash = self._get_config_hash(config)
             needs_reinit = (
                 self.__class__._current_runner is None or self.__class__._current_config_hash != config_hash or getattr(config, "lazy_load", False)
@@ -833,6 +1011,8 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VLoRALoader": LightX2VLoRALoader,
     "LightX2VConfigCombiner": LightX2VConfigCombiner,
     "LightX2VModularInference": LightX2VModularInference,
+    "TalkObjectInput": TalkObjectInput,
+    "TalkObjectsBuilder": TalkObjectsBuilder,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -843,4 +1023,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VLoRALoader": "LightX2V LoRA Loader",
     "LightX2VConfigCombiner": "LightX2V Config Combiner",
     "LightX2VModularInference": "LightX2V Modular Inference",
+    "TalkObjectInput": "Talk Object Input",
+    "TalkObjectsBuilder": "Talk Objects Builder",
 }
