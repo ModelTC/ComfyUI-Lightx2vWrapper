@@ -137,6 +137,7 @@ class LightX2VDefaultConfig:
         "seq_parallel": False,
         "cfg_parallel": False,
         "audio_sr": 16000,
+        "return_video": True,
     }
 
 

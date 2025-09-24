@@ -1,30 +1,37 @@
 """Modular ComfyUI nodes for LightX2V without presets."""
 
 import gc
-import hashlib
 import json
 import logging
 import os
-import tempfile
 
 import numpy as np
 import torch
 from comfy.utils import ProgressBar
 from PIL import Image
 
-from .bridge import (
-    ModularConfigManager,
-    get_available_attn_ops,
-    get_available_quant_ops,
+from .bridge import get_available_attn_ops, get_available_quant_ops
+from .config_builder import (
+    ConfigBuilder,
+    InferenceConfigBuilder,
+    LoRAChainBuilder,
+    TalkObjectConfigBuilder,
+)
+from .data_models import (
+    InferenceConfig,
+    MemoryOptimizationConfig,
+    QuantizationConfig,
+    TalkObjectsConfig,
+    TeaCacheConfig,
+)
+from .file_handlers import (
+    AudioFileHandler,
+    ComfyUIFileResolver,
+    ImageFileHandler,
+    TempFileManager,
 )
 from .lightx2v.lightx2v.infer import init_runner
-from .model_utils import (
-    get_lora_full_path,
-    get_model_full_path,
-    scan_loras,
-    scan_models,
-    support_model_cls_list,
-)
+from .model_utils import scan_loras, scan_models, support_model_cls_list
 
 
 class LightX2VInferenceConfig:
@@ -211,61 +218,30 @@ class LightX2VInferenceConfig:
         use_tiny_vae=False,
     ):
         """Create basic inference configuration."""
-        model_path = get_model_full_path(model_name)
+        builder = InferenceConfigBuilder()
 
-        if model_cls == "hunyuan":
-            fps = 24
-        else:
-            fps = 16
+        config = builder.build(
+            model_cls=model_cls,
+            model_name=model_name,
+            task=task,
+            infer_steps=infer_steps,
+            seed=seed,
+            cfg_scale=cfg_scale,
+            cfg_scale2=cfg_scale2,
+            sample_shift=sample_shift,
+            height=height,
+            width=width,
+            duration=duration,
+            attention_type=attention_type,
+            denoising_steps=denoising_steps,
+            resize_mode=resize_mode,
+            fixed_area=fixed_area,
+            segment_length=segment_length,
+            prev_frame_length=prev_frame_length,
+            use_tiny_vae=use_tiny_vae,
+        )
 
-        video_length = int(round(duration * fps))
-
-        if video_length < 16:
-            logging.warning("Video length is too short, setting to 16")
-            video_length = 16
-
-        remainder = (video_length - 1) % 4
-        if remainder != 0:
-            video_length = video_length + (4 - remainder)
-
-        # TODO(xxx):
-        use_31_block = True
-        if "seko" in model_cls:
-            video_length = segment_length
-            use_31_block = False
-
-        config = {
-            "model_cls": model_cls,
-            "model_path": model_path,
-            "task": task,
-            "infer_steps": infer_steps,
-            "seed": seed if seed != -1 else np.random.randint(0, 2**32 - 1),
-            "cfg_scale": cfg_scale,
-            "cfg_scale2": cfg_scale2,
-            "sample_shift": sample_shift,
-            "height": height,
-            "width": width,
-            "video_length": video_length,
-            "fps": fps,
-            "video_duration": duration,
-            "resize_mode": resize_mode,
-            "fixed_area": fixed_area,
-            "use_31_block": use_31_block,
-            "attention_type": attention_type,
-            "use_tiny_vae": use_tiny_vae,
-        }
-        if "seko" in [model_cls]:
-            config["prev_frame_length"] = prev_frame_length
-
-        if denoising_steps and denoising_steps.strip():
-            try:
-                steps_list = [int(s.strip()) for s in denoising_steps.split(",")]
-                config["denoising_step_list"] = steps_list
-                config["infer_steps"] = len(steps_list)
-            except ValueError:
-                pass
-
-        return (config,)
+        return (config.to_dict(),)
 
 
 class LightX2VTeaCache:
@@ -305,12 +281,9 @@ class LightX2VTeaCache:
     CATEGORY = "LightX2V/Config"
 
     def create_config(self, enable, threshold, use_ret_steps):
-        config = {
-            "enable": enable,
-            "threshold": threshold,
-            "use_ret_steps": use_ret_steps,
-        }
-        return (config,)
+        """Create TeaCache configuration."""
+        config = TeaCacheConfig(enable=enable, threshold=threshold, use_ret_steps=use_ret_steps)
+        return (config.to_dict(),)
 
 
 class LightX2VQuantization:
@@ -383,14 +356,14 @@ class LightX2VQuantization:
         adapter_quant_scheme,
     ):
         """Create quantization configuration."""
-        config = {
-            "dit_quant_scheme": dit_quant_scheme,
-            "t5_quant_scheme": t5_quant_scheme,
-            "clip_quant_scheme": clip_quant_scheme,
-            "adapter_quant_scheme": adapter_quant_scheme,
-            "quant_op": quant_op,
-        }
-        return (config,)
+        config = QuantizationConfig(
+            quant_op=quant_op,
+            dit_quant_scheme=dit_quant_scheme,
+            t5_quant_scheme=t5_quant_scheme,
+            clip_quant_scheme=clip_quant_scheme,
+            adapter_quant_scheme=adapter_quant_scheme,
+        )
+        return (config.to_dict(),)
 
 
 class LightX2VMemoryOptimization:
@@ -481,23 +454,24 @@ class LightX2VMemoryOptimization:
         lazy_load=False,
         unload_after_inference=False,
     ):
-        config = {
-            "enable_rotary_chunk": enable_rotary_chunk,
-            "rotary_chunk_size": rotary_chunk_size,
-            "clean_cuda_cache": clean_cuda_cache,
-            "cpu_offload": cpu_offload,
-            "offload_granularity": offload_granularity,
-            "offload_ratio": offload_ratio,
-            "t5_cpu_offload": t5_cpu_offload,
-            "t5_offload_granularity": t5_offload_granularity,
-            "audio_encoder_cpu_offload": audio_encoder_cpu_offload,
-            "audio_adapter_cpu_offload": audio_adapter_cpu_offload,
-            "vae_cpu_offload": vae_cpu_offload,
-            "use_tiling_vae": use_tiling_vae,
-            "lazy_load": lazy_load,
-            "unload_after_inference": unload_after_inference,
-        }
-        return (config,)
+        """Create memory optimization configuration."""
+        config = MemoryOptimizationConfig(
+            enable_rotary_chunk=enable_rotary_chunk,
+            rotary_chunk_size=rotary_chunk_size,
+            clean_cuda_cache=clean_cuda_cache,
+            cpu_offload=cpu_offload,
+            offload_granularity=offload_granularity,
+            offload_ratio=offload_ratio,
+            t5_cpu_offload=t5_cpu_offload,
+            t5_offload_granularity=t5_offload_granularity,
+            audio_encoder_cpu_offload=audio_encoder_cpu_offload,
+            audio_adapter_cpu_offload=audio_adapter_cpu_offload,
+            vae_cpu_offload=vae_cpu_offload,
+            use_tiling_vae=use_tiling_vae,
+            lazy_load=lazy_load,
+            unload_after_inference=unload_after_inference,
+        )
+        return (config.to_dict(),)
 
 
 class LightX2VLoRALoader:
@@ -539,35 +513,22 @@ class LightX2VLoRALoader:
     CATEGORY = "LightX2V/LoRA"
 
     def load_lora(self, lora_name, strength, lora_chain=None):
-        if lora_chain is None:
-            lora_chain = []
-        else:
-            lora_chain = lora_chain.copy()
-
-        lora_path = get_lora_full_path(lora_name)
-
-        if lora_path:
-            lora_config = {"path": lora_path, "strength": strength}
-            lora_chain.append(lora_config)
-
-        return (lora_chain,)
+        """Load and chain LoRA configurations."""
+        chain = LoRAChainBuilder.build_chain(lora_name=lora_name, strength=strength, existing_chain=lora_chain)
+        return (chain,)
 
 
 class TalkObjectInput:
-    """单个谈话对象（音频+遮罩）输入节点"""
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio_source": (["upload", "url"], {"default": "upload", "tooltip": "音频输入方式"}),
-                "mask_source": (["upload", "url", "none"], {"default": "upload", "tooltip": "遮罩输入方式"}),
+                "name": ("STRING", {"default": "person_1", "tooltip": "说话人名称标识"}),
             },
             "optional": {
                 "audio": ("AUDIO", {"tooltip": "上传的音频文件"}),
-                "audio_url": ("STRING", {"default": "", "tooltip": "音频文件URL路径"}),
-                "mask": ("MASK", {"tooltip": "上传的遮罩图像"}),
-                "mask_url": ("STRING", {"default": "", "tooltip": "遮罩图像URL路径"}),
+                "mask": ("MASK", {"tooltip": "上传的遮罩图像（可选）"}),
+                "save_to_input": ("BOOLEAN", {"default": True, "tooltip": "是否保存到input文件夹"}),
             },
         }
 
@@ -576,76 +537,104 @@ class TalkObjectInput:
     FUNCTION = "create_talk_object"
     CATEGORY = "LightX2V/Audio"
 
-    def create_talk_object(self, audio_source, mask_source, audio=None, audio_url="", mask=None, mask_url=""):
-        """创建单个谈话对象配置"""
-        talk_object = {}
+    def create_talk_object(self, name, audio=None, mask=None, save_to_input=True):
+        """Create a talk object from input data."""
+        builder = TalkObjectConfigBuilder()
 
-        # 处理音频
-        if audio_source == "upload" and audio is not None:
-            # 音频将在推理时转换为临时文件
-            talk_object["audio_data"] = audio
-            talk_object["audio_type"] = "upload"
-        elif audio_source == "url" and audio_url:
-            talk_object["audio"] = audio_url
-            talk_object["audio_type"] = "url"
-        else:
-            return (None,)  # 无效的音频输入
+        talk_object = builder.build_from_input(name=name, audio=audio, mask=mask, save_to_input=save_to_input)
 
-        # 处理遮罩
-        if mask_source == "upload" and mask is not None:
-            talk_object["mask_data"] = mask
-            talk_object["mask_type"] = "upload"
-        elif mask_source == "url" and mask_url:
-            talk_object["mask"] = mask_url
-            talk_object["mask_type"] = "url"
-        elif mask_source == "none":
-            # 不使用遮罩
-            talk_object["mask"] = None
-            talk_object["mask_type"] = "none"
-
-        return (talk_object,)
+        if talk_object:
+            return (talk_object.to_dict(),)
+        return (None,)
 
 
-class TalkObjectsBuilder:
-    """构建多人对话配置的节点"""
+class TalkObjectsCombiner:
+    """组合多个谈话对象为配置"""
 
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = {"required": {}, "optional": {}}
+
+        # 预定义10个TALK_OBJECT输入槽
+        for i in range(1, 11):
+            inputs["optional"][f"talk_object_{i}"] = ("TALK_OBJECT", {"tooltip": f"谈话对象{i}"})
+
+        return inputs
+
+    RETURN_TYPES = ("TALK_OBJECTS_CONFIG",)
+    RETURN_NAMES = ("talk_objects_config",)
+    FUNCTION = "combine_talk_objects"
+    CATEGORY = "LightX2V/Audio"
+
+    def combine_talk_objects(self, **kwargs):
+        config = TalkObjectsConfig()
+
+        for i in range(1, 11):
+            talk_obj = kwargs.get(f"talk_object_{i}")
+
+            if talk_obj is not None:
+                config.add_object(talk_obj)
+
+        if not config.talk_objects:
+            return (None,)
+
+        return (config,)
+
+
+class TalkObjectsFromJSON:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "number": ("INT", {"default": 1, "min": 0, "max": 10, "tooltip": "谈话对象数量，0表示无，1表示单人，2+表示多人"}),
-            },
-            "optional": {
-                # 支持最多10个谈话对象
-                **{f"talk_object_{i}": ("TALK_OBJECT",) for i in range(1, 11)}
+                "json_config": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": '[{"name": "person1", "audio": "/path/to/audio1.wav", "mask": "/path/to/mask1.png"}]',
+                        "tooltip": "JSON格式的谈话对象配置",
+                    },
+                ),
             },
         }
 
     RETURN_TYPES = ("TALK_OBJECTS_CONFIG",)
     RETURN_NAMES = ("talk_objects_config",)
-    FUNCTION = "build_talk_objects"
+    FUNCTION = "parse_json_config"
     CATEGORY = "LightX2V/Audio"
 
-    def build_talk_objects(self, number, **kwargs):
-        """构建谈话对象列表"""
-        if number == 0:
-            return (None,)
+    def parse_json_config(self, json_config):
+        builder = TalkObjectConfigBuilder()
+        talk_objects_config = builder.build_from_json(json_config)
+        return (talk_objects_config,)
 
-        talk_objects = []
-        for i in range(1, number + 1):
-            talk_obj = kwargs.get(f"talk_object_{i}")
-            if talk_obj is not None:
-                talk_objects.append(talk_obj)
 
-        if not talk_objects:
-            return (None,)
+class TalkObjectsFromFiles:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "audio_files": ("STRING", {"multiline": True, "default": "audio1.wav\naudio2.wav", "tooltip": "音频文件列表（每行一个）"}),
+            },
+            "optional": {
+                "mask_files": ("STRING", {"multiline": True, "default": "mask1.png\nmask2.png", "tooltip": "遮罩文件列表（每行一个，可选）"}),
+                "names": ("STRING", {"multiline": True, "default": "person1\nperson2", "tooltip": "人物名称列表（每行一个，可选）"}),
+            },
+        }
 
-        return ({"talk_objects": talk_objects},)
+    RETURN_TYPES = ("TALK_OBJECTS_CONFIG",)
+    RETURN_NAMES = ("talk_objects_config",)
+    FUNCTION = "build_from_files"
+    CATEGORY = "LightX2V/Audio"
+
+    def build_from_files(self, audio_files, mask_files="", names=""):
+        builder = TalkObjectConfigBuilder()
+        talk_objects_config = builder.build_from_files(audio_files, mask_files, names)
+        return (talk_objects_config,)
 
 
 class LightX2VConfigCombiner:
     def __init__(self):
-        self.config_manager = ModularConfigManager()
+        self.config_builder = ConfigBuilder()
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -688,36 +677,37 @@ class LightX2VConfigCombiner:
         lora_chain=None,
         talk_objects_config=None,
     ):
-        configs = {
-            "inference": inference_config,
-        }
-        if teacache_config:
-            configs["teacache"] = teacache_config
-        if quantization_config:
-            configs["quantization"] = quantization_config
-        if memory_config:
-            configs["memory"] = memory_config
+        """Combine multiple configurations into final config."""
+        # Convert dict configs back to objects if needed
 
-        config = self.config_manager.build_final_config(configs)
+        # Create objects from dicts
+        inf_config = InferenceConfig(**inference_config) if isinstance(inference_config, dict) else None
+        tea_config = TeaCacheConfig(**teacache_config) if teacache_config and isinstance(teacache_config, dict) else None
+        quant_config = QuantizationConfig(**quantization_config) if quantization_config and isinstance(quantization_config, dict) else None
+        mem_config = MemoryOptimizationConfig(**memory_config) if memory_config and isinstance(memory_config, dict) else None
 
-        if lora_chain:
-            config.lora_configs = lora_chain
-
-        if talk_objects_config:
-            config.talk_objects_config = talk_objects_config
-
-        logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
+        config = self.config_builder.combine_configs(
+            inference_config=inf_config,
+            teacache_config=tea_config,
+            quantization_config=quant_config,
+            memory_config=mem_config,
+            lora_chain=lora_chain,
+            talk_objects_config=talk_objects_config,
+        )
 
         return (config,)
 
 
 class LightX2VModularInference:
-    # 类变量，所有实例共享
     _current_runner = None
     _current_config_hash = None
 
     def __init__(self):
-        pass
+        self.config_builder = ConfigBuilder()
+        self.temp_manager = TempFileManager()
+        self.image_handler = ImageFileHandler()
+        self.audio_handler = AudioFileHandler()
+        self.resolver = ComfyUIFileResolver()
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -751,43 +741,8 @@ class LightX2VModularInference:
     CATEGORY = "LightX2V/Inference"
 
     def _get_config_hash(self, config) -> str:
-        relevant_configs = {
-            "model_cls": getattr(config, "model_cls", None),
-            "model_path": getattr(config, "model_path", None),
-            "task": getattr(config, "task", None),
-            "t5_quantized": getattr(config, "t5_quantized", False),
-            "clip_quantized": getattr(config, "clip_quantized", False),
-            "lora_configs": getattr(config, "lora_configs", None),
-            "mm_config": getattr(config, "mm_config", None),
-            "cross_attn_1_type": getattr(config, "cross_attn_1_type", None),
-            "cross_attn_2_type": getattr(config, "cross_attn_2_type", None),
-            "self_attn_1_type": getattr(config, "self_attn_1_type", None),
-            "self_attn_2_type": getattr(config, "self_attn_2_type", None),
-            "cpu_offload": getattr(config, "cpu_offload", False),
-            "offload_granularity": getattr(config, "offload_granularity", None),
-            "offload_ratio": getattr(config, "offload_ratio", None),
-            "t5_cpu_offload": getattr(config, "t5_cpu_offload", False),
-            "t5_offload_granularity": getattr(config, "t5_offload_granularity", None),
-            "audio_encoder_cpu_offload": getattr(config, "audio_encoder_cpu_offload", False),
-            "audio_adapter_cpu_offload": getattr(config, "audio_adapter_cpu_offload", False),
-            "vae_cpu_offload": getattr(config, "vae_cpu_offload", False),
-            "use_tiling_vae": getattr(config, "use_tiling_vae", False),
-            "unload_after_inference": getattr(config, "unload_after_inference", False),
-            "enable_rotary_chunk": getattr(config, "enable_rotary_chunk", False),
-            "rotary_chunk_size": getattr(config, "rotary_chunk_size", None),
-            "clean_cuda_cache": getattr(config, "clean_cuda_cache", False),
-            "torch_compile": getattr(config, "torch_compile", False),
-            "threshold": getattr(config, "threshold", None),
-            "use_ret_steps": getattr(config, "use_ret_steps", False),
-            "t5_quant_scheme": getattr(config, "t5_quant_scheme", None),
-            "clip_quant_scheme": getattr(config, "clip_quant_scheme", None),
-            "adapter_quant_scheme": getattr(config, "adapter_quant_scheme", None),
-            "adapter_quantized": getattr(config, "adapter_quantized", False),
-            "feature_caching": getattr(config, "feature_caching", None),
-        }
-
-        config_str = json.dumps(relevant_configs, sort_keys=True)
-        return hashlib.md5(config_str.encode()).hexdigest()
+        """Get hash of configuration to detect changes."""
+        return self.config_builder.get_config_hash(config)
 
     def generate(
         self,
@@ -798,156 +753,72 @@ class LightX2VModularInference:
         audio=None,
         **kwargs,
     ):
+        # config type is EasyDict
         config = combined_config
-
         config.prompt = prompt
         config.negative_prompt = negative_prompt
 
         if config.task == "i2v" and image is None:
             raise ValueError("i2v task requires input image")
 
-        temp_files = []
-
         try:
+            # Handle image input
             if config.task == "i2v" and image is not None:
                 image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
                 pil_image = Image.fromarray(image_np)
 
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                    pil_image.save(tmp.name)
-                    config.image_path = tmp.name
-                    temp_files.append(tmp.name)
-                logging.info(f"Image saved to {tmp.name}")
+                temp_path = self.temp_manager.create_temp_file(suffix=".png")
+                pil_image.save(temp_path)
+                config.image_path = temp_path
+                logging.info(f"Image saved to {temp_path}")
 
+            # Handle audio input for seko models
             if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
-                if isinstance(audio, dict) and "waveform" in audio and "sample_rate" in audio:
-                    waveform = audio["waveform"]
-                    sample_rate = audio["sample_rate"]
+                temp_path = self.temp_manager.create_temp_file(suffix=".wav")
+                self.audio_handler.save(audio, temp_path)
+                config.audio_path = temp_path
+                logging.info(f"Audio saved to {temp_path}")
 
-                    # Handle different waveform shapes
-                    if isinstance(waveform, torch.Tensor):
-                        if waveform.dim() == 3:  # [batch, channels, samples]
-                            waveform = waveform[0]  # Take first batch
-                        if waveform.dim() == 2:  # [channels, samples]
-                            # Convert to [samples, channels] for wav file
-                            waveform = waveform.transpose(0, 1)
-                        waveform = waveform.cpu().numpy()
-                elif isinstance(audio, tuple) and len(audio) == 2:
-                    # Legacy format support
-                    waveform, sample_rate = audio
-                    if isinstance(waveform, torch.Tensor):
-                        waveform = waveform.cpu().numpy()
-                else:
-                    raise ValueError(f"Unsupported audio format: {type(audio)}")
-
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                    try:
-                        import scipy.io.wavfile as wavfile
-                    except ImportError:
-                        import wave
-
-                        with wave.open(tmp.name, "wb") as wav_file:
-                            wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
-                            wav_file.setsampwidth(2)  # 16-bit
-                            wav_file.setframerate(sample_rate)
-                            if waveform.dtype != np.int16:
-                                waveform = (waveform * 32767).astype(np.int16)
-                            wav_file.writeframes(waveform.tobytes())
-                    else:
-                        if waveform.ndim == 1:
-                            wavfile.write(tmp.name, sample_rate, waveform)
-                        else:
-                            if waveform.shape[0] < waveform.shape[1]:
-                                waveform = waveform.T
-                            wavfile.write(tmp.name, sample_rate, waveform)
-
-                    config.audio_path = tmp.name
-                    temp_files.append(tmp.name)
-
-                    logging.info(f"Audio saved to {tmp.name}")
-
-            # 处理多人对话对象
-            if hasattr(config, "talk_objects_config") and config.talk_objects_config:
-                talk_objects = config.talk_objects_config.get("talk_objects", [])
+            # Handle talk objects
+            if hasattr(config, "talk_objects") and config.talk_objects:
+                talk_objects = config.talk_objects
                 processed_talk_objects = []
 
                 for talk_obj in talk_objects:
                     processed_obj = {}
 
-                    # 处理音频
-                    if talk_obj.get("audio_type") == "upload" and "audio_data" in talk_obj:
-                        audio_data = talk_obj["audio_data"]
+                    if "audio" in talk_obj:
+                        processed_obj["audio"] = talk_obj["audio"]
 
-                        # 处理音频数据，转换为临时文件
-                        if isinstance(audio_data, dict) and "waveform" in audio_data and "sample_rate" in audio_data:
-                            waveform = audio_data["waveform"]
-                            sample_rate = audio_data["sample_rate"]
-
-                            if isinstance(waveform, torch.Tensor):
-                                if waveform.dim() == 3:
-                                    waveform = waveform[0]
-                                if waveform.dim() == 2:
-                                    waveform = waveform.transpose(0, 1)
-                                waveform = waveform.cpu().numpy()
-
-                            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                                try:
-                                    import scipy.io.wavfile as wavfile
-
-                                    if waveform.ndim == 1:
-                                        wavfile.write(tmp.name, sample_rate, waveform)
-                                    else:
-                                        if waveform.shape[0] < waveform.shape[1]:
-                                            waveform = waveform.T
-                                        wavfile.write(tmp.name, sample_rate, waveform)
-                                except ImportError:
-                                    import wave
-
-                                    with wave.open(tmp.name, "wb") as wav_file:
-                                        wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
-                                        wav_file.setsampwidth(2)
-                                        wav_file.setframerate(sample_rate)
-                                        if waveform.dtype != np.int16:
-                                            waveform = (waveform * 32767).astype(np.int16)
-                                        wav_file.writeframes(waveform.tobytes())
-
-                                processed_obj["audio"] = tmp.name
-                                temp_files.append(tmp.name)
-                                logging.info(f"Talk object audio saved to {tmp.name}")
-                    elif talk_obj.get("audio_type") == "url":
-                        processed_obj["audio"] = talk_obj.get("audio")
-
-                    # 处理遮罩
-                    if talk_obj.get("mask_type") == "upload" and "mask_data" in talk_obj:
-                        mask_data = talk_obj["mask_data"]
-
-                        # 假设 mask_data 是一个 tensor 或 numpy array
-                        if isinstance(mask_data, torch.Tensor):
-                            mask_np = (mask_data[0].cpu().numpy() * 255).astype(np.uint8)
-                        elif isinstance(mask_data, np.ndarray):
-                            mask_np = (mask_data * 255).astype(np.uint8)
-                        else:
-                            mask_np = mask_data
-
-                        mask_image = Image.fromarray(mask_np)
-
-                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                            mask_image.save(tmp.name)
-                            processed_obj["mask"] = tmp.name
-                            temp_files.append(tmp.name)
-                            logging.info(f"Talk object mask saved to {tmp.name}")
-                    elif talk_obj.get("mask_type") == "url":
-                        processed_obj["mask"] = talk_obj.get("mask")
-                    elif talk_obj.get("mask_type") == "none":
-                        processed_obj["mask"] = None
+                    if "mask" in talk_obj:
+                        processed_obj["mask"] = talk_obj["mask"]
 
                     if "audio" in processed_obj:
                         processed_talk_objects.append(processed_obj)
 
-                # 设置 talk_objects 到 config
+                # Resolve paths
+                for obj in processed_talk_objects:
+                    if "audio" in obj and obj["audio"]:
+                        audio_path = obj["audio"]
+                        if not os.path.isabs(audio_path) and not audio_path.startswith("/tmp"):
+                            obj["audio"] = self.resolver.resolve_input_path(audio_path)
+                            logging.info(f"Resolved audio path: {audio_path} -> {obj['audio']}")
+                        if not os.path.exists(obj["audio"]):
+                            logging.warning(f"Audio file not found: {obj['audio']}")
+
+                    if "mask" in obj and obj["mask"]:
+                        mask_path = obj["mask"]
+                        if not os.path.isabs(mask_path) and not mask_path.startswith("/tmp"):
+                            obj["mask"] = self.resolver.resolve_input_path(mask_path)
+                            logging.info(f"Resolved mask path: {mask_path} -> {obj['mask']}")
+                        if not os.path.exists(obj["mask"]):
+                            logging.warning(f"Mask file not found: {obj['mask']}")
+
                 if processed_talk_objects:
                     config.talk_objects = processed_talk_objects
                     logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+
+            logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
             config_hash = self._get_config_hash(config)
             needs_reinit = (
@@ -970,13 +841,13 @@ class LightX2VModularInference:
 
             progress = ProgressBar(100)
 
-            def update_progress(current_step, total):
+            def update_progress(current_step, _total):
                 progress.update_absolute(current_step)
 
             if hasattr(self.__class__._current_runner, "set_progress_callback"):
                 self.__class__._current_runner.set_progress_callback(update_progress)
 
-            result_dict = self.__class__._current_runner.run_pipeline(save_video=False)
+            result_dict = self.__class__._current_runner.run_pipeline()
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
 
@@ -995,12 +866,8 @@ class LightX2VModularInference:
             raise
 
         finally:
-            for temp_file in temp_files:
-                if os.path.exists(temp_file):
-                    try:
-                        os.unlink(temp_file)
-                    except Exception:
-                        pass
+            # Cleanup is handled by TempFileManager destructor
+            pass
 
 
 NODE_CLASS_MAPPINGS = {
@@ -1011,8 +878,10 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VLoRALoader": LightX2VLoRALoader,
     "LightX2VConfigCombiner": LightX2VConfigCombiner,
     "LightX2VModularInference": LightX2VModularInference,
-    "TalkObjectInput": TalkObjectInput,
-    "TalkObjectsBuilder": TalkObjectsBuilder,
+    "LightX2VTalkObjectInput": TalkObjectInput,
+    "LightX2VTalkObjectsCombiner": TalkObjectsCombiner,
+    "LightX2VTalkObjectsFromJSON": TalkObjectsFromJSON,
+    "LightX2VTalkObjectsFromFiles": TalkObjectsFromFiles,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1023,6 +892,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VLoRALoader": "LightX2V LoRA Loader",
     "LightX2VConfigCombiner": "LightX2V Config Combiner",
     "LightX2VModularInference": "LightX2V Modular Inference",
-    "TalkObjectInput": "Talk Object Input",
-    "TalkObjectsBuilder": "Talk Objects Builder",
+    "LightX2VTalkObjectInput": "LightX2V Talk Object Input (Single)",
+    "LightX2VTalkObjectsCombiner": "LightX2V Talk Objects Combiner",
+    "LightX2VTalkObjectsFromFiles": "LightX2V Talk Objects From Files",
+    "LightX2VTalkObjectsFromJSON": "LightX2V Talk Objects From JSON (API)",
 }
