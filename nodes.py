@@ -838,6 +838,8 @@ class LightX2VModularInference:
             else:
                 if hasattr(self.__class__._current_runner, "config"):
                     self.__class__._current_runner.config = config
+                    self.__class__._current_runner.model.config = config
+                    self.__class__._current_runner.model.scheduler.config = config
 
             progress = ProgressBar(100)
 
