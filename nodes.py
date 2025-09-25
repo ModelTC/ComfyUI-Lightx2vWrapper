@@ -703,6 +703,11 @@ class LightX2VModularInference:
     _current_config_hash = None
 
     def __init__(self):
+        if not hasattr(self.__class__, '_current_runner'):
+            self.__class__._current_runner = None
+        if not hasattr(self.__class__, '_current_config_hash'):
+            self.__class__._current_config_hash = None
+            
         self.config_builder = ConfigBuilder()
         self.temp_manager = TempFileManager()
         self.image_handler = ImageFileHandler()
@@ -821,14 +826,19 @@ class LightX2VModularInference:
             logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
             config_hash = self._get_config_hash(config)
+            
+            # 安全地访问类属性
+            current_runner = getattr(self.__class__, '_current_runner', None)
+            current_config_hash = getattr(self.__class__, '_current_config_hash', None)
+            
             needs_reinit = (
-                self.__class__._current_runner is None or self.__class__._current_config_hash != config_hash or getattr(config, "lazy_load", False)
+                current_runner is None or current_config_hash != config_hash or getattr(config, "lazy_load", False)
             )
 
-            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {self.__class__._current_config_hash}, new config hash: {config_hash}")
+            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}")
             if needs_reinit:
-                if self.__class__._current_runner is not None:
-                    # self.__class__._current_runner.end_run()
+                if current_runner is not None:
+                    # current_runner.end_run()
                     del self.__class__._current_runner
                     torch.cuda.empty_cache()
                     gc.collect()
@@ -836,25 +846,29 @@ class LightX2VModularInference:
                 self.__class__._current_runner = init_runner(config)
                 self.__class__._current_config_hash = config_hash
             else:
-                if hasattr(self.__class__._current_runner, "config"):
-                    self.__class__._current_runner.config = config
-                    self.__class__._current_runner.model.config = config
-                    self.__class__._current_runner.model.scheduler.config = config
+                if hasattr(current_runner, "config"):
+                    current_runner.config = config
+                    current_runner.model.config = config
+                    current_runner.model.scheduler.config = config
 
             progress = ProgressBar(100)
 
             def update_progress(current_step, _total):
                 progress.update_absolute(current_step)
 
-            if hasattr(self.__class__._current_runner, "set_progress_callback"):
-                self.__class__._current_runner.set_progress_callback(update_progress)
+            # 重新获取当前runner，因为可能在reinit过程中发生了变化
+            current_runner = getattr(self.__class__, '_current_runner', None)
+            
+            if hasattr(current_runner, "set_progress_callback"):
+                current_runner.set_progress_callback(update_progress)
 
-            result_dict = self.__class__._current_runner.run_pipeline()
+            result_dict = current_runner.run_pipeline()
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
 
             if getattr(config, "unload_after_inference", False):
-                del self.__class__._current_runner
+                if hasattr(self.__class__, '_current_runner'):
+                    del self.__class__._current_runner
                 self.__class__._current_runner = None
                 self.__class__._current_config_hash = None
 
