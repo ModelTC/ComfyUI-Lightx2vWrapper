@@ -284,6 +284,7 @@ class ConfigBuilder:
         lora_chain: Optional[List[Dict[str, Any]]] = None,
         talk_objects_config: Optional[TalkObjectsConfig] = None,
     ) -> EasyDict:
+        # Create combined configuration
         combined = CombinedConfig(
             inference=inference_config,
             teacache=teacache_config,
@@ -292,20 +293,14 @@ class ConfigBuilder:
             talk_objects=talk_objects_config,
         )
 
-        # Add LoRA configs
+        # Process LoRA configs if provided
         if lora_chain:
             for lora_dict in lora_chain:
                 lora_config = LoRAConfig(path=lora_dict["path"], strength=lora_dict.get("strength", 1.0))
                 combined.lora_configs.append(lora_config)
 
-        configs_dict = combined.to_dict()
-        configs_dict = {k: v for k, v in configs_dict.items() if v is not None}
-        final_config = self.manager.build_final_config(configs_dict)
-
-        if lora_chain:
-            final_config.lora_configs = lora_chain
-        if talk_objects_config:
-            final_config.update(talk_objects_config.to_dict())
+        # Build final configuration from combined config
+        final_config = self.manager.build_final_config_from_combined(combined)
 
         return final_config
 

@@ -469,31 +469,97 @@ class ModularConfigManager:
             logging.warning(f"Failed to load model config: {e}")
             return {}
 
-    def build_final_config(self, configs: Dict[str, Dict[str, Any]]) -> EasyDict:
-        """Build final configuration from module configs."""
+    def build_final_config_from_combined(self, combined_config) -> EasyDict:
+        """Build final configuration directly from CombinedConfig object."""
         final_config = copy.deepcopy(self.base_config)
 
-        config_modules = [("inference", self.apply_inference_config)]
+        # Apply inference configuration
+        if combined_config.inference:
+            updates = self.apply_inference_config(combined_config.inference.to_dict())
+            final_config.update(updates)
 
-        for module_name, apply_func in config_modules:
-            if module_name in configs:
-                final_config.update(apply_func(configs[module_name]))
-
-        if "memory" in configs:
-            memory_updates = self.apply_memory_optimization(configs["memory"])
+        # Apply memory optimization configuration
+        if combined_config.memory:
+            memory_updates = self.apply_memory_optimization(combined_config.memory.to_dict())
             final_config.update(memory_updates)
 
-        if "teacache" in configs:
-            teacache_updates = self.apply_teacache_config(configs["teacache"], final_config)
+        # Apply TeaCache configuration
+        if combined_config.teacache:
+            teacache_updates = self.apply_teacache_config(combined_config.teacache.to_dict(), final_config)
             final_config.update(teacache_updates)
 
-        if "quantization" in configs:
-            quant_updates = self.apply_quantization_config(configs["quantization"])
+        # Apply quantization configuration
+        if combined_config.quantization:
+            quant_updates = self.apply_quantization_config(combined_config.quantization.to_dict())
             final_config.update(quant_updates)
 
+        # Handle LoRA configurations
+        if combined_config.lora_configs:
+            lora_chain = [lora.to_dict() for lora in combined_config.lora_configs]
+            final_config["lora_configs"] = lora_chain
+
+        # Handle talk objects configuration
+        if combined_config.talk_objects:
+            talk_objects_dict = combined_config.talk_objects.to_dict()
+            final_config.update(talk_objects_dict)
+
+        # Load model-specific configuration
         model_config = self._load_model_config(final_config.get("model_path", ""))
         for key, value in model_config.items():
             if key not in final_config or final_config[key] is None:
                 final_config[key] = value
 
         return EasyDict(final_config)
+
+    def build_final_config(self, configs: Dict[str, Dict[str, Any]]) -> EasyDict:
+        """Build final configuration from module configs.
+
+        This method is kept for backward compatibility.
+        It converts dict configs to CombinedConfig and uses the new method.
+        """
+        from .data_models import (
+            CombinedConfig,
+            InferenceConfig,
+            LoRAConfig,
+            MemoryOptimizationConfig,
+            QuantizationConfig,
+            TalkObject,
+            TalkObjectsConfig,
+            TeaCacheConfig,
+        )
+
+        # Create CombinedConfig from dictionary configs
+        combined = CombinedConfig()
+
+        # Process inference config
+        if "inference" in configs:
+            combined.inference = InferenceConfig(**configs["inference"])
+
+        # Process teacache config
+        if "teacache" in configs:
+            combined.teacache = TeaCacheConfig(**configs["teacache"])
+
+        # Process quantization config
+        if "quantization" in configs:
+            combined.quantization = QuantizationConfig(**configs["quantization"])
+
+        # Process memory config
+        if "memory" in configs:
+            combined.memory = MemoryOptimizationConfig(**configs["memory"])
+
+        # Process lora configs
+        if "lora_configs" in configs:
+            for lora_dict in configs["lora_configs"]:
+                lora_config = LoRAConfig(**lora_dict)
+                combined.lora_configs.append(lora_config)
+
+        # Process talk objects
+        if "talk_objects" in configs:
+            talk_objects = TalkObjectsConfig()
+            for obj_dict in configs["talk_objects"]:
+                talk_obj = TalkObject(**obj_dict)
+                talk_objects.add_object(talk_obj)
+            combined.talk_objects = talk_objects
+
+        # Use the new method to build final config
+        return self.build_final_config_from_combined(combined)
