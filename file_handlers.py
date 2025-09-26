@@ -1,8 +1,7 @@
-"""Unified file handlers for LightX2V ComfyUI wrapper."""
-
 import logging
 import os
 import tempfile
+import urllib.parse
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -320,6 +319,141 @@ class TempFileManager:
     def __del__(self):
         """Cleanup on deletion."""
         self.cleanup_all()
+
+
+class HTTPFileDownloader:
+    """Handler for downloading files from HTTP/HTTPS URLs."""
+
+    def __init__(self):
+        self.temp_manager = TempFileManager()
+
+    @staticmethod
+    def is_url(path: str) -> bool:
+        """Check if the path is an HTTP/HTTPS URL.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if path is HTTP/HTTPS URL, False otherwise
+        """
+        if not path:
+            return False
+
+        parsed = urllib.parse.urlparse(path)
+        return parsed.scheme in ("http", "https")
+
+    def download_to_input(self, url: str, filename: Optional[str] = None) -> str:
+        """Download file from URL to ComfyUI input directory.
+
+        Args:
+            url: URL to download from
+            filename: Target filename (optional, will be generated if not provided)
+
+        Returns:
+            Absolute path to downloaded file
+
+        Raises:
+            Exception: If download fails
+        """
+        try:
+            import requests
+        except ImportError:
+            logging.error("requests module not available for HTTP download")
+            raise ImportError("requests module is required for HTTP download")
+
+        # Generate filename if not provided
+        if not filename:
+            # Extract filename from URL
+            parsed_url = urllib.parse.urlparse(url)
+            url_filename = os.path.basename(parsed_url.path)
+
+            if url_filename:
+                # Use URL filename but add a unique suffix to avoid conflicts
+                import uuid
+
+                name, ext = os.path.splitext(url_filename)
+                filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+            else:
+                # Generate a completely new filename
+                import uuid
+
+                filename = f"downloaded_{uuid.uuid4().hex[:8]}"
+
+        # Get input directory
+        input_dir = ComfyUIFileResolver.get_input_directory()
+        full_path = os.path.join(input_dir, filename)
+
+        # Create directory if needed
+        os.makedirs(input_dir, exist_ok=True)
+
+        try:
+            logging.info(f"Downloading file from {url} to {full_path}")
+
+            # Download with streaming to handle large files
+            response = requests.get(url, stream=True, timeout=30)
+            response.raise_for_status()
+
+            # Get total size for progress reporting
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded_size = 0
+
+            # Write to file
+            with open(full_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+
+                        # Log progress for large files
+                        if total_size > 0 and total_size > 1024 * 1024:  # > 1MB
+                            progress = (downloaded_size / total_size) * 100
+                            if downloaded_size % (1024 * 1024) == 0:  # Log every 1MB
+                                logging.debug(f"Download progress: {progress:.1f}%")
+
+            logging.info(f"Successfully downloaded file to {full_path}")
+            return full_path
+
+        except requests.exceptions.RequestException as e:
+            # Clean up partial file if download failed
+            if os.path.exists(full_path):
+                try:
+                    os.unlink(full_path)
+                except Exception:
+                    pass
+
+            logging.error(f"Failed to download file from {url}: {e}")
+            raise Exception(f"Failed to download file from {url}: {e}")
+        except Exception as e:
+            # Clean up partial file if download failed
+            if os.path.exists(full_path):
+                try:
+                    os.unlink(full_path)
+                except Exception:
+                    pass
+
+            logging.error(f"Error downloading file: {e}")
+            raise
+
+    def download_if_url(self, path: str, prefix: str = "downloaded") -> str:
+        """Download file if path is URL, otherwise return path as-is.
+
+        Args:
+            path: Path or URL to process
+            prefix: Prefix for downloaded filename
+
+        Returns:
+            Absolute path to local file
+        """
+        if self.is_url(path):
+            # Generate filename with prefix
+            import uuid
+
+            ext = os.path.splitext(urllib.parse.urlparse(path).path)[1] or ".bin"
+            filename = f"{prefix}_{uuid.uuid4().hex[:8]}{ext}"
+            return self.download_to_input(path, filename)
+
+        return path
 
 
 class ComfyUIFileResolver:
