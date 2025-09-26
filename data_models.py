@@ -86,7 +86,11 @@ class TeaCacheConfig:
     use_ret_steps: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"enable": self.enable, "threshold": self.threshold, "use_ret_steps": self.use_ret_steps}
+        return {
+            "enable": self.enable,
+            "threshold": self.threshold,
+            "use_ret_steps": self.use_ret_steps,
+        }
 
 
 @dataclass

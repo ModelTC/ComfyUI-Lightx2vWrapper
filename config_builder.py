@@ -134,7 +134,9 @@ class InferenceConfigBuilder:
 
         return config
 
-    def _apply_optional_params(self, config: InferenceConfig, optional_params: Dict[str, Any]):
+    def _apply_optional_params(
+        self, config: InferenceConfig, optional_params: Dict[str, Any]
+    ):
         """Apply optional parameters to config."""
         # Handle denoising steps
         if "denoising_steps" in optional_params:
@@ -148,7 +150,13 @@ class InferenceConfigBuilder:
                     logging.warning(f"Invalid denoising steps: {steps_str}")
 
         # Handle other optional params
-        for param in ["resize_mode", "fixed_area", "segment_length", "prev_frame_length", "use_tiny_vae"]:
+        for param in [
+            "resize_mode",
+            "fixed_area",
+            "segment_length",
+            "prev_frame_length",
+            "use_tiny_vae",
+        ]:
             if param in optional_params:
                 setattr(config, param, optional_params[param])
 
@@ -168,7 +176,13 @@ class TalkObjectConfigBuilder:
         self.mask_handler = MaskFileHandler()
         self.resolver = ComfyUIFileResolver()
 
-    def build_from_input(self, name: str, audio: Optional[Any] = None, mask: Optional[Any] = None, save_to_input: bool = True) -> TalkObject:
+    def build_from_input(
+        self,
+        name: str,
+        audio: Optional[Any] = None,
+        mask: Optional[Any] = None,
+        save_to_input: bool = True,
+    ) -> TalkObject:
         """Build talk object from input data."""
         if audio is None:
             return None
@@ -210,7 +224,12 @@ class TalkObjectConfigBuilder:
                 if not isinstance(obj_data, dict) or "audio" not in obj_data:
                     continue
 
-                talk_obj = TalkObject(name=obj_data.get("name", "unknown"), audio=obj_data["audio"], mask=obj_data.get("mask"), source_type="path")
+                talk_obj = TalkObject(
+                    name=obj_data.get("name", "unknown"),
+                    audio=obj_data["audio"],
+                    mask=obj_data.get("mask"),
+                    source_type="path",
+                )
                 config.add_object(talk_obj)
 
             return config if config.talk_objects else None
@@ -218,13 +237,19 @@ class TalkObjectConfigBuilder:
         except json.JSONDecodeError as e:
             logging.error(f"Failed to parse JSON: {e}")
 
-    def build_from_files(self, audio_files: str, mask_files: str = "", names: str = "") -> Optional[TalkObjectsConfig]:
+    def build_from_files(
+        self, audio_files: str, mask_files: str = "", names: str = ""
+    ) -> Optional[TalkObjectsConfig]:
         """Build talk objects configuration from file lists."""
         audio_list = [f.strip() for f in audio_files.split("\n") if f.strip()]
         if not audio_list:
             return None
 
-        mask_list = [f.strip() for f in mask_files.split("\n") if f.strip()] if mask_files else []
+        mask_list = (
+            [f.strip() for f in mask_files.split("\n") if f.strip()]
+            if mask_files
+            else []
+        )
         name_list = [n.strip() for n in names.split("\n") if n.strip()] if names else []
 
         config = TalkObjectsConfig()
@@ -288,14 +313,18 @@ class ConfigBuilder:
         # Add LoRA configs
         if lora_chain:
             for lora_dict in lora_chain:
-                lora_config = LoRAConfig(path=lora_dict["path"], strength=lora_dict.get("strength", 1.0))
+                lora_config = LoRAConfig(
+                    path=lora_dict["path"], strength=lora_dict.get("strength", 1.0)
+                )
                 combined.lora_configs.append(lora_config)
 
         # Build final config using existing manager
         configs_dict = {
             "inference": inference_config.to_dict() if inference_config else {},
             "teacache": teacache_config.to_dict() if teacache_config else None,
-            "quantization": quantization_config.to_dict() if quantization_config else None,
+            "quantization": quantization_config.to_dict()
+            if quantization_config
+            else None,
             "memory": memory_config.to_dict() if memory_config else None,
         }
 
@@ -333,8 +362,12 @@ class ConfigBuilder:
             "offload_ratio": getattr(config, "offload_ratio", None),
             "t5_cpu_offload": getattr(config, "t5_cpu_offload", False),
             "t5_offload_granularity": getattr(config, "t5_offload_granularity", None),
-            "audio_encoder_cpu_offload": getattr(config, "audio_encoder_cpu_offload", False),
-            "audio_adapter_cpu_offload": getattr(config, "audio_adapter_cpu_offload", False),
+            "audio_encoder_cpu_offload": getattr(
+                config, "audio_encoder_cpu_offload", False
+            ),
+            "audio_adapter_cpu_offload": getattr(
+                config, "audio_adapter_cpu_offload", False
+            ),
             "vae_cpu_offload": getattr(config, "vae_cpu_offload", False),
             "use_tiling_vae": getattr(config, "use_tiling_vae", False),
             "unload_after_inference": getattr(config, "unload_after_inference", False),
@@ -359,7 +392,9 @@ class LoRAChainBuilder:
     """Builder for LoRA chain configurations."""
 
     @staticmethod
-    def build_chain(lora_name: str, strength: float, existing_chain: Optional[List[Dict]] = None) -> List[Dict]:
+    def build_chain(
+        lora_name: str, strength: float, existing_chain: Optional[List[Dict]] = None
+    ) -> List[Dict]:
         """Build or extend a LoRA chain."""
         if existing_chain is None:
             chain = []

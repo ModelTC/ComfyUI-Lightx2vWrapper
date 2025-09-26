@@ -42,7 +42,6 @@ def is_module_installed(module_name):
 
 
 def get_available_ops(op_mapping):
-    """通用的操作可用性检查函数"""
     available_ops = []
     for op_name, module_name in op_mapping.items():
         is_available = is_module_installed(module_name)
@@ -51,13 +50,20 @@ def get_available_ops(op_mapping):
 
 
 def get_available_quant_ops():
-    quant_mapping = {"sgl": "sgl_kernel", "vllm": "vllm", "q8f": "q8_kernels", "torchao": "torchao"}
+    quant_mapping = {
+        "sgl": "sgl_kernel",
+        "vllm": "vllm",
+        "q8f": "q8_kernels",
+        "torchao": "torchao",
+    }
 
     available_ops = get_available_ops(quant_mapping)
 
-    # Ada架构GPU优先使用q8f
+    # Prefer q8f for Ada architecture GPUs
     if is_ada_architecture_gpu():
-        q8f_available = next((op for op in available_ops if op[0] == "q8f" and op[1]), None)
+        q8f_available = next(
+            (op for op in available_ops if op[0] == "q8f" and op[1]), None
+        )
         if q8f_available:
             available_ops.remove(q8f_available)
             available_ops.insert(0, q8f_available)
@@ -66,7 +72,12 @@ def get_available_quant_ops():
 
 
 def get_available_attn_ops():
-    attn_mapping = {"sage_attn2": "sageattention", "flash_attn3": "flash_attn_interface", "flash_attn2": "flash_attn", "torch_sdpa": "torch"}
+    attn_mapping = {
+        "sage_attn2": "sageattention",
+        "flash_attn3": "flash_attn_interface",
+        "flash_attn2": "flash_attn",
+        "torch_sdpa": "torch",
+    }
 
     return get_available_ops(attn_mapping)
 
@@ -74,10 +85,21 @@ def get_available_attn_ops():
 class LightX2VDefaultConfig:
     """Central default configuration for LightX2V."""
 
-    # 分组常量
     DEFAULT_ATTENTION_TYPE = "flash_attn3"
-    DEFAULT_QUANTIZATION_SCHEMES = {"dit": "bf16", "t5": "bf16", "clip": "fp16", "adapter": "bf16"}
-    DEFAULT_VIDEO_PARAMS = {"height": 480, "width": 832, "length": 81, "fps": 16, "vae_stride": [4, 8, 8], "patch_size": [1, 2, 2]}
+    DEFAULT_QUANTIZATION_SCHEMES = {
+        "dit": "bf16",
+        "t5": "bf16",
+        "clip": "fp16",
+        "adapter": "bf16",
+    }
+    DEFAULT_VIDEO_PARAMS = {
+        "height": 480,
+        "width": 832,
+        "length": 81,
+        "fps": 16,
+        "vae_stride": [4, 8, 8],
+        "patch_size": [1, 2, 2],
+    }
 
     DEFAULT_CONFIG = {
         # Model Configuration
@@ -246,8 +268,9 @@ class ModularConfigManager:
         self._available_attn_ops = None
         self._available_quant_ops = None
 
-    def _get_available_ops(self, ops_list: List[Tuple[str, bool]], fallback: str = None) -> List[str]:
-        """从操作列表中提取可用的操作"""
+    def _get_available_ops(
+        self, ops_list: List[Tuple[str, bool]], fallback: str = None
+    ) -> List[str]:
         available = [op_name for op_name, is_available in ops_list if is_available]
         if fallback and fallback not in available:
             available.append(fallback)
@@ -267,8 +290,9 @@ class ModularConfigManager:
             self._available_quant_ops = get_available_quant_ops()
         return self._get_available_ops(self._available_quant_ops)
 
-    def _update_from_config(self, updates: Dict, config: Dict, mappings: Dict[str, str]) -> None:
-        """通用配置更新方法"""
+    def _update_from_config(
+        self, updates: Dict, config: Dict, mappings: Dict[str, str]
+    ) -> None:
         for config_key, update_key in mappings.items():
             if config_key in config:
                 if config_key == "seed" and config[config_key] == -1:
@@ -279,7 +303,6 @@ class ModularConfigManager:
         """Apply basic inference configuration."""
         updates = {}
 
-        # 基础映射配置
         basic_mappings = {
             "model_cls": "model_cls",
             "model_path": "model_path",
@@ -311,17 +334,31 @@ class ModularConfigManager:
         if "wan2.2" in config["model_cls"]:
             updates["use_image_encoder"] = False
 
-        attention_type = config.get("attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE)
-        for attn_key in ["attention_type", "self_attn_1_type", "cross_attn_1_type", "cross_attn_2_type"]:
+        attention_type = config.get(
+            "attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE
+        )
+        for attn_key in [
+            "attention_type",
+            "self_attn_1_type",
+            "cross_attn_1_type",
+            "cross_attn_2_type",
+        ]:
             updates[attn_key] = attention_type
 
-        # TinyVAE配置
         if config.get("use_tiny_vae", False):
-            updates.update({"use_tiny_vae": True, "tiny_vae": True, "tiny_vae_path": os.path.join(config["model_path"], "taew2_1.pth")})
+            updates.update(
+                {
+                    "use_tiny_vae": True,
+                    "tiny_vae": True,
+                    "tiny_vae_path": os.path.join(config["model_path"], "taew2_1.pth"),
+                }
+            )
 
         return updates
 
-    def apply_teacache_config(self, config: Dict[str, Any], model_info: Dict[str, Any]) -> Dict[str, Any]:
+    def apply_teacache_config(
+        self, config: Dict[str, Any], model_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Apply TeaCache configuration."""
         updates = {}
 
@@ -337,7 +374,9 @@ class ModularConfigManager:
                 model_info.get("target_height", 480),
             )
 
-            coeffs = CoefficientCalculator.get_coefficients(task, model_size, resolution, updates["use_ret_steps"])
+            coeffs = CoefficientCalculator.get_coefficients(
+                task, model_size, resolution, updates["use_ret_steps"]
+            )
             updates["coefficients"] = coeffs
         else:
             updates["feature_caching"] = "NoCaching"
@@ -345,7 +384,6 @@ class ModularConfigManager:
         return updates
 
     def _get_mm_type(self, dit_scheme: str, quant_backend: str) -> str:
-        """获取mm_type配置"""
         if dit_scheme == "bf16":
             return "Default"
 
@@ -413,21 +451,29 @@ class ModularConfigManager:
         }
 
         for config_key, update_key in direct_mappings.items():
-            updates[update_key] = config.get(config_key, config.get("cpu_offload", False))
+            updates[update_key] = config.get(
+                config_key, config.get("cpu_offload", False)
+            )
 
         if updates.get("rotary_chunk"):
             updates["rotary_chunk_size"] = config.get("rotary_chunk_size", 100)
 
         if updates.get("cpu_offload"):
-            updates.update({"offload_granularity": config.get("offload_granularity", "phase"), "offload_ratio": config.get("offload_ratio", 1.0)})
+            updates.update(
+                {
+                    "offload_granularity": config.get("offload_granularity", "phase"),
+                    "offload_ratio": config.get("offload_ratio", 1.0),
+                }
+            )
 
         if updates.get("t5_cpu_offload"):
-            updates["t5_offload_granularity"] = config.get("t5_offload_granularity", "model")
+            updates["t5_offload_granularity"] = config.get(
+                "t5_offload_granularity", "model"
+            )
 
         return updates
 
     def _load_model_config(self, model_path: str) -> Dict[str, Any]:
-        """加载模型配置文件"""
         config_path = os.path.join(model_path, "config.json")
         if not os.path.exists(config_path):
             return {}
@@ -454,7 +500,9 @@ class ModularConfigManager:
             final_config.update(memory_updates)
 
         if "teacache" in configs:
-            teacache_updates = self.apply_teacache_config(configs["teacache"], final_config)
+            teacache_updates = self.apply_teacache_config(
+                configs["teacache"], final_config
+            )
             final_config.update(teacache_updates)
 
         if "quantization" in configs:

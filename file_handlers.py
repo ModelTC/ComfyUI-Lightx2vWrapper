@@ -33,7 +33,12 @@ class AudioFileHandler(FileHandler):
     def __init__(self):
         self.supported_formats = [".wav", ".mp3", ".flac", ".m4a"]
 
-    def save(self, audio_data: Union[Dict, torch.Tensor, np.ndarray, Tuple], path: str, sample_rate: Optional[int] = None) -> str:
+    def save(
+        self,
+        audio_data: Union[Dict, torch.Tensor, np.ndarray, Tuple],
+        path: str,
+        sample_rate: Optional[int] = None,
+    ) -> str:
         """Save audio data to file.
 
         Args:
@@ -80,7 +85,9 @@ class AudioFileHandler(FileHandler):
         sample_rate, waveform = wavfile.read(path)
         return waveform, sample_rate
 
-    def _extract_audio_data(self, audio_data: Any, sample_rate: Optional[int] = None) -> Tuple[np.ndarray, int]:
+    def _extract_audio_data(
+        self, audio_data: Any, sample_rate: Optional[int] = None
+    ) -> Tuple[np.ndarray, int]:
         """Extract waveform and sample rate from various audio formats.
 
         Handles three main sources:
@@ -98,7 +105,9 @@ class AudioFileHandler(FileHandler):
                 if isinstance(waveform, torch.Tensor):
                     if waveform.dim() == 3:  # [batch, channels, samples]
                         waveform = waveform[0]  # Take first batch
-                    if waveform.dim() == 2 and waveform.shape[0] <= 2:  # [channels, samples]
+                    if (
+                        waveform.dim() == 2 and waveform.shape[0] <= 2
+                    ):  # [channels, samples]
                         waveform = waveform.transpose(0, 1)  # -> [samples, channels]
                     waveform = waveform.cpu().numpy()
             else:
@@ -173,7 +182,9 @@ class ImageFileHandler(FileHandler):
     def __init__(self):
         self.supported_formats = [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]
 
-    def save(self, image_data: Union[torch.Tensor, np.ndarray, Image.Image], path: str) -> str:
+    def save(
+        self, image_data: Union[torch.Tensor, np.ndarray, Image.Image], path: str
+    ) -> str:
         """Save image data to file.
 
         Args:
@@ -254,7 +265,9 @@ class TempFileManager:
         self.temp_files: List[str] = []
 
     @contextmanager
-    def temp_file(self, suffix: str = "", prefix: str = "lightx2v_", delete: bool = True):
+    def temp_file(
+        self, suffix: str = "", prefix: str = "lightx2v_", delete: bool = True
+    ):
         """Context manager for temporary file creation.
 
         Args:
@@ -265,7 +278,9 @@ class TempFileManager:
         Yields:
             Path to temporary file
         """
-        temp_file = tempfile.NamedTemporaryFile(suffix=suffix, prefix=prefix, delete=False)
+        temp_file = tempfile.NamedTemporaryFile(
+            suffix=suffix, prefix=prefix, delete=False
+        )
         temp_path = temp_file.name
         temp_file.close()
 
@@ -287,7 +302,9 @@ class TempFileManager:
         Returns:
             Path to temporary file
         """
-        with tempfile.NamedTemporaryFile(suffix=suffix, prefix=prefix, delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix, prefix=prefix, delete=False
+        ) as tmp:
             temp_path = tmp.name
 
         self.temp_files.append(temp_path)

@@ -150,7 +150,14 @@ class LightX2VInferenceConfig:
                     },
                 ),
                 "resize_mode": (
-                    ["adaptive", "keep_ratio_fixed_area", "fixed_min_area", "fixed_max_area", "fixed_shape", "fixed_min_side"],
+                    [
+                        "adaptive",
+                        "keep_ratio_fixed_area",
+                        "fixed_min_area",
+                        "fixed_max_area",
+                        "fixed_shape",
+                        "fixed_min_side",
+                    ],
                     {
                         "default": "adaptive",
                         "tooltip": "Adaptive resize input image to target aspect ratio",
@@ -282,7 +289,9 @@ class LightX2VTeaCache:
 
     def create_config(self, enable, threshold, use_ret_steps):
         """Create TeaCache configuration."""
-        config = TeaCacheConfig(enable=enable, threshold=threshold, use_ret_steps=use_ret_steps)
+        config = TeaCacheConfig(
+            enable=enable, threshold=threshold, use_ret_steps=use_ret_steps
+        )
         return (config.to_dict(),)
 
 
@@ -514,7 +523,9 @@ class LightX2VLoRALoader:
 
     def load_lora(self, lora_name, strength, lora_chain=None):
         """Load and chain LoRA configurations."""
-        chain = LoRAChainBuilder.build_chain(lora_name=lora_name, strength=strength, existing_chain=lora_chain)
+        chain = LoRAChainBuilder.build_chain(
+            lora_name=lora_name, strength=strength, existing_chain=lora_chain
+        )
         return (chain,)
 
 
@@ -523,12 +534,18 @@ class TalkObjectInput:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "name": ("STRING", {"default": "person_1", "tooltip": "说话人名称标识"}),
+                "name": (
+                    "STRING",
+                    {"default": "person_1", "tooltip": "speaker name identifier"},
+                ),
             },
             "optional": {
-                "audio": ("AUDIO", {"tooltip": "上传的音频文件"}),
-                "mask": ("MASK", {"tooltip": "上传的遮罩图像（可选）"}),
-                "save_to_input": ("BOOLEAN", {"default": True, "tooltip": "是否保存到input文件夹"}),
+                "audio": ("AUDIO", {"tooltip": "uploaded audio file"}),
+                "mask": ("MASK", {"tooltip": "uploaded mask image (optional)"}),
+                "save_to_input": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "save to input folder"},
+                ),
             },
         }
 
@@ -541,7 +558,9 @@ class TalkObjectInput:
         """Create a talk object from input data."""
         builder = TalkObjectConfigBuilder()
 
-        talk_object = builder.build_from_input(name=name, audio=audio, mask=mask, save_to_input=save_to_input)
+        talk_object = builder.build_from_input(
+            name=name, audio=audio, mask=mask, save_to_input=save_to_input
+        )
 
         if talk_object:
             return (talk_object.to_dict(),)
@@ -549,15 +568,16 @@ class TalkObjectInput:
 
 
 class TalkObjectsCombiner:
-    """组合多个谈话对象为配置"""
-
     @classmethod
     def INPUT_TYPES(cls):
         inputs = {"required": {}, "optional": {}}
 
-        # 预定义10个TALK_OBJECT输入槽
+        # Pre-defined 10 TALK_OBJECT input slots
         for i in range(1, 11):
-            inputs["optional"][f"talk_object_{i}"] = ("TALK_OBJECT", {"tooltip": f"谈话对象{i}"})
+            inputs["optional"][f"talk_object_{i}"] = (
+                "TALK_OBJECT",
+                {"tooltip": f"talk object {i}"},
+            )
 
         return inputs
 
@@ -591,7 +611,7 @@ class TalkObjectsFromJSON:
                     {
                         "multiline": True,
                         "default": '[{"name": "person1", "audio": "/path/to/audio1.wav", "mask": "/path/to/mask1.png"}]',
-                        "tooltip": "JSON格式的谈话对象配置",
+                        "tooltip": "JSON format talk objects configuration",
                     },
                 ),
             },
@@ -613,11 +633,32 @@ class TalkObjectsFromFiles:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio_files": ("STRING", {"multiline": True, "default": "audio1.wav\naudio2.wav", "tooltip": "音频文件列表（每行一个）"}),
+                "audio_files": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "audio1.wav\naudio2.wav",
+                        "tooltip": "audio file list (one per line)",
+                    },
+                ),
             },
             "optional": {
-                "mask_files": ("STRING", {"multiline": True, "default": "mask1.png\nmask2.png", "tooltip": "遮罩文件列表（每行一个，可选）"}),
-                "names": ("STRING", {"multiline": True, "default": "person1\nperson2", "tooltip": "人物名称列表（每行一个，可选）"}),
+                "mask_files": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "mask1.png\nmask2.png",
+                        "tooltip": "mask file list (one per line, optional)",
+                    },
+                ),
+                "names": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "person1\nperson2",
+                        "tooltip": "talk object name list (one per line, optional)",
+                    },
+                ),
             },
         }
 
@@ -659,7 +700,10 @@ class LightX2VConfigCombiner:
                     {"tooltip": "Memory optimization configuration"},
                 ),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
-                "talk_objects_config": ("TALK_OBJECTS_CONFIG", {"tooltip": "Multi-person talk objects configuration"}),
+                "talk_objects_config": (
+                    "TALK_OBJECTS_CONFIG",
+                    {"tooltip": "Multi-person talk objects configuration"},
+                ),
             },
         }
 
@@ -681,10 +725,26 @@ class LightX2VConfigCombiner:
         # Convert dict configs back to objects if needed
 
         # Create objects from dicts
-        inf_config = InferenceConfig(**inference_config) if isinstance(inference_config, dict) else None
-        tea_config = TeaCacheConfig(**teacache_config) if teacache_config and isinstance(teacache_config, dict) else None
-        quant_config = QuantizationConfig(**quantization_config) if quantization_config and isinstance(quantization_config, dict) else None
-        mem_config = MemoryOptimizationConfig(**memory_config) if memory_config and isinstance(memory_config, dict) else None
+        inf_config = (
+            InferenceConfig(**inference_config)
+            if isinstance(inference_config, dict)
+            else None
+        )
+        tea_config = (
+            TeaCacheConfig(**teacache_config)
+            if teacache_config and isinstance(teacache_config, dict)
+            else None
+        )
+        quant_config = (
+            QuantizationConfig(**quantization_config)
+            if quantization_config and isinstance(quantization_config, dict)
+            else None
+        )
+        mem_config = (
+            MemoryOptimizationConfig(**memory_config)
+            if memory_config and isinstance(memory_config, dict)
+            else None
+        )
 
         config = self.config_builder.combine_configs(
             inference_config=inf_config,
@@ -703,11 +763,11 @@ class LightX2VModularInference:
     _current_config_hash = None
 
     def __init__(self):
-        if not hasattr(self.__class__, '_current_runner'):
+        if not hasattr(self.__class__, "_current_runner"):
             self.__class__._current_runner = None
-        if not hasattr(self.__class__, '_current_config_hash'):
+        if not hasattr(self.__class__, "_current_config_hash"):
             self.__class__._current_config_hash = None
-            
+
         self.config_builder = ConfigBuilder()
         self.temp_manager = TempFileManager()
         self.image_handler = ImageFileHandler()
@@ -778,7 +838,11 @@ class LightX2VModularInference:
                 logging.info(f"Image saved to {temp_path}")
 
             # Handle audio input for seko models
-            if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
+            if (
+                audio is not None
+                and hasattr(config, "model_cls")
+                and "seko" in config.model_cls
+            ):
                 temp_path = self.temp_manager.create_temp_file(suffix=".wav")
                 self.audio_handler.save(audio, temp_path)
                 config.audio_path = temp_path
@@ -805,37 +869,52 @@ class LightX2VModularInference:
                 for obj in processed_talk_objects:
                     if "audio" in obj and obj["audio"]:
                         audio_path = obj["audio"]
-                        if not os.path.isabs(audio_path) and not audio_path.startswith("/tmp"):
+                        if not os.path.isabs(audio_path) and not audio_path.startswith(
+                            "/tmp"
+                        ):
                             obj["audio"] = self.resolver.resolve_input_path(audio_path)
-                            logging.info(f"Resolved audio path: {audio_path} -> {obj['audio']}")
+                            logging.info(
+                                f"Resolved audio path: {audio_path} -> {obj['audio']}"
+                            )
                         if not os.path.exists(obj["audio"]):
                             logging.warning(f"Audio file not found: {obj['audio']}")
 
                     if "mask" in obj and obj["mask"]:
                         mask_path = obj["mask"]
-                        if not os.path.isabs(mask_path) and not mask_path.startswith("/tmp"):
+                        if not os.path.isabs(mask_path) and not mask_path.startswith(
+                            "/tmp"
+                        ):
                             obj["mask"] = self.resolver.resolve_input_path(mask_path)
-                            logging.info(f"Resolved mask path: {mask_path} -> {obj['mask']}")
+                            logging.info(
+                                f"Resolved mask path: {mask_path} -> {obj['mask']}"
+                            )
                         if not os.path.exists(obj["mask"]):
                             logging.warning(f"Mask file not found: {obj['mask']}")
 
                 if processed_talk_objects:
                     config.talk_objects = processed_talk_objects
-                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+                    logging.info(
+                        f"Processed {len(processed_talk_objects)} talk objects"
+                    )
 
-            logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
-
-            config_hash = self._get_config_hash(config)
-            
-            # 安全地访问类属性
-            current_runner = getattr(self.__class__, '_current_runner', None)
-            current_config_hash = getattr(self.__class__, '_current_config_hash', None)
-            
-            needs_reinit = (
-                current_runner is None or current_config_hash != config_hash or getattr(config, "lazy_load", False)
+            logging.info(
+                "lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False)
             )
 
-            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}")
+            config_hash = self._get_config_hash(config)
+
+            current_runner = getattr(self.__class__, "_current_runner", None)
+            current_config_hash = getattr(self.__class__, "_current_config_hash", None)
+
+            needs_reinit = (
+                current_runner is None
+                or current_config_hash != config_hash
+                or getattr(config, "lazy_load", False)
+            )
+
+            logging.info(
+                f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}"
+            )
             if needs_reinit:
                 if current_runner is not None:
                     # current_runner.end_run()
@@ -856,9 +935,8 @@ class LightX2VModularInference:
             def update_progress(current_step, _total):
                 progress.update_absolute(current_step)
 
-            # 重新获取当前runner，因为可能在reinit过程中发生了变化
-            current_runner = getattr(self.__class__, '_current_runner', None)
-            
+            current_runner = getattr(self.__class__, "_current_runner", None)
+
             if hasattr(current_runner, "set_progress_callback"):
                 current_runner.set_progress_callback(update_progress)
 
@@ -867,7 +945,7 @@ class LightX2VModularInference:
             audio = result_dict.get("audio", None)
 
             if getattr(config, "unload_after_inference", False):
-                if hasattr(self.__class__, '_current_runner'):
+                if hasattr(self.__class__, "_current_runner"):
                     del self.__class__._current_runner
                 self.__class__._current_runner = None
                 self.__class__._current_config_hash = None
