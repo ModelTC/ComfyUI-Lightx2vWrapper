@@ -563,20 +563,21 @@ class TalkObjectInput:
         )
 
         if talk_object:
-            return (talk_object.to_dict(),)
+            return (talk_object,)
         return (None,)
 
 
 class TalkObjectsCombiner:
+    PREDEFINED_SLOTS = 16
+
     @classmethod
     def INPUT_TYPES(cls):
         inputs = {"required": {}, "optional": {}}
 
-        # Pre-defined 10 TALK_OBJECT input slots
-        for i in range(1, 11):
-            inputs["optional"][f"talk_object_{i}"] = (
+        for i in range(cls.PREDEFINED_SLOTS):
+            inputs["optional"][f"talk_object_{i + 1}"] = (
                 "TALK_OBJECT",
-                {"tooltip": f"talk object {i}"},
+                {"tooltip": f"talk object {i + 1}"},
             )
 
         return inputs
@@ -589,8 +590,8 @@ class TalkObjectsCombiner:
     def combine_talk_objects(self, **kwargs):
         config = TalkObjectsConfig()
 
-        for i in range(1, 11):
-            talk_obj = kwargs.get(f"talk_object_{i}")
+        for i in range(self.PREDEFINED_SLOTS):
+            talk_obj = kwargs.get(f"talk_object_{i + 1}")
 
             if talk_obj is not None:
                 config.add_object(talk_obj)

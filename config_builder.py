@@ -183,23 +183,19 @@ class TalkObjectConfigBuilder:
         mask: Optional[Any] = None,
         save_to_input: bool = True,
     ) -> TalkObject:
-        """Build talk object from input data."""
         if audio is None:
             return None
 
         talk_object = TalkObject(name=name)
 
-        # Process audio
         if save_to_input and audio is not None:
             audio_path = self._save_audio_to_input(name, audio)
             if audio_path:
                 talk_object.audio = audio_path
-                talk_object.source_type = "file"
+
         else:
             talk_object.audio = audio
-            talk_object.source_type = "data"
 
-        # Process mask
         if mask is not None:
             if save_to_input:
                 mask_path = self._save_mask_to_input(name, mask)
@@ -228,7 +224,6 @@ class TalkObjectConfigBuilder:
                     name=obj_data.get("name", "unknown"),
                     audio=obj_data["audio"],
                     mask=obj_data.get("mask"),
-                    source_type="path",
                 )
                 config.add_object(talk_obj)
 
@@ -259,14 +254,12 @@ class TalkObjectConfigBuilder:
                 name=name_list[i] if i < len(name_list) else f"person_{i + 1}",
                 audio=audio_file,
                 mask=mask_list[i] if i < len(mask_list) else None,
-                source_type="file",
             )
             config.add_object(talk_obj)
 
         return config
 
     def _save_audio_to_input(self, name: str, audio_data: Any) -> Optional[str]:
-        """Save audio data to input directory."""
         try:
             filename = f"{name}_audio_{uuid.uuid4().hex[:8]}.wav"
             return self.resolver.save_to_input(audio_data, filename, self.audio_handler)
@@ -275,7 +268,6 @@ class TalkObjectConfigBuilder:
             return None
 
     def _save_mask_to_input(self, name: str, mask_data: Any) -> Optional[str]:
-        """Save mask data to input directory."""
         try:
             filename = f"{name}_mask_{uuid.uuid4().hex[:8]}.png"
             return self.resolver.save_to_input(mask_data, filename, self.mask_handler)
@@ -300,8 +292,6 @@ class ConfigBuilder:
         lora_chain: Optional[List[Dict[str, Any]]] = None,
         talk_objects_config: Optional[TalkObjectsConfig] = None,
     ) -> EasyDict:
-        """Combine all configurations into final config."""
-        # Create combined config object
         combined = CombinedConfig(
             inference=inference_config,
             teacache=teacache_config,
@@ -318,26 +308,12 @@ class ConfigBuilder:
                 )
                 combined.lora_configs.append(lora_config)
 
-        # Build final config using existing manager
-        configs_dict = {
-            "inference": inference_config.to_dict() if inference_config else {},
-            "teacache": teacache_config.to_dict() if teacache_config else None,
-            "quantization": quantization_config.to_dict()
-            if quantization_config
-            else None,
-            "memory": memory_config.to_dict() if memory_config else None,
-        }
-
-        # Filter out None values
+        configs_dict = combined.to_dict()
         configs_dict = {k: v for k, v in configs_dict.items() if v is not None}
-
-        # Use existing manager to build config
         final_config = self.manager.build_final_config(configs_dict)
 
-        # Add additional configs
         if lora_chain:
             final_config.lora_configs = lora_chain
-
         if talk_objects_config:
             final_config.update(talk_objects_config.to_dict())
 

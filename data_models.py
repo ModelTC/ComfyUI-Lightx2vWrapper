@@ -14,7 +14,6 @@ class TalkObject:
     name: str
     audio: Optional[Union[str, Dict[str, Any], torch.Tensor, np.ndarray]] = None
     mask: Optional[Union[str, torch.Tensor, np.ndarray]] = None
-    source_type: str = "data"  # "data", "file", or "path"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for pipeline."""
@@ -30,7 +29,6 @@ class TalkObject:
         elif self.mask is not None:
             result["mask_data"] = self.mask
 
-        result["source_type"] = self.source_type
         return result
 
 
@@ -149,21 +147,16 @@ class LoRAConfig:
 
 @dataclass
 class TalkObjectsConfig:
-    """Configuration for multiple talk objects."""
-
     talk_objects: List[TalkObject] = field(default_factory=list)
 
     def add_object(self, talk_object: TalkObject):
-        """Add a talk object to the configuration."""
         self.talk_objects.append(talk_object)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for pipeline."""
-        return {"talk_objects": [obj for obj in self.talk_objects]}
+        return {"talk_objects": [obj.to_dict() for obj in self.talk_objects]}
 
     def to_list(self) -> List[Dict[str, Any]]:
-        """Get list of talk object dictionaries."""
-        return [obj for obj in self.talk_objects]
+        return [obj.to_dict() for obj in self.talk_objects]
 
 
 @dataclass

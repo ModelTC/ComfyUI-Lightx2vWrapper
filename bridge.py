@@ -160,6 +160,7 @@ class LightX2VDefaultConfig:
         "cfg_parallel": False,
         "audio_sr": 16000,
         "return_video": True,
+        "talk_objects": None,
     }
 
 
@@ -300,7 +301,6 @@ class ModularConfigManager:
                 updates[update_key] = config[config_key]
 
     def apply_inference_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply basic inference configuration."""
         updates = {}
 
         basic_mappings = {
