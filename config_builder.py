@@ -134,9 +134,7 @@ class InferenceConfigBuilder:
 
         return config
 
-    def _apply_optional_params(
-        self, config: InferenceConfig, optional_params: Dict[str, Any]
-    ):
+    def _apply_optional_params(self, config: InferenceConfig, optional_params: Dict[str, Any]):
         """Apply optional parameters to config."""
         # Handle denoising steps
         if "denoising_steps" in optional_params:
@@ -232,19 +230,13 @@ class TalkObjectConfigBuilder:
         except json.JSONDecodeError as e:
             logging.error(f"Failed to parse JSON: {e}")
 
-    def build_from_files(
-        self, audio_files: str, mask_files: str = "", names: str = ""
-    ) -> Optional[TalkObjectsConfig]:
+    def build_from_files(self, audio_files: str, mask_files: str = "", names: str = "") -> Optional[TalkObjectsConfig]:
         """Build talk objects configuration from file lists."""
         audio_list = [f.strip() for f in audio_files.split("\n") if f.strip()]
         if not audio_list:
             return None
 
-        mask_list = (
-            [f.strip() for f in mask_files.split("\n") if f.strip()]
-            if mask_files
-            else []
-        )
+        mask_list = [f.strip() for f in mask_files.split("\n") if f.strip()] if mask_files else []
         name_list = [n.strip() for n in names.split("\n") if n.strip()] if names else []
 
         config = TalkObjectsConfig()
@@ -303,9 +295,7 @@ class ConfigBuilder:
         # Add LoRA configs
         if lora_chain:
             for lora_dict in lora_chain:
-                lora_config = LoRAConfig(
-                    path=lora_dict["path"], strength=lora_dict.get("strength", 1.0)
-                )
+                lora_config = LoRAConfig(path=lora_dict["path"], strength=lora_dict.get("strength", 1.0))
                 combined.lora_configs.append(lora_config)
 
         configs_dict = combined.to_dict()
@@ -338,12 +328,8 @@ class ConfigBuilder:
             "offload_ratio": getattr(config, "offload_ratio", None),
             "t5_cpu_offload": getattr(config, "t5_cpu_offload", False),
             "t5_offload_granularity": getattr(config, "t5_offload_granularity", None),
-            "audio_encoder_cpu_offload": getattr(
-                config, "audio_encoder_cpu_offload", False
-            ),
-            "audio_adapter_cpu_offload": getattr(
-                config, "audio_adapter_cpu_offload", False
-            ),
+            "audio_encoder_cpu_offload": getattr(config, "audio_encoder_cpu_offload", False),
+            "audio_adapter_cpu_offload": getattr(config, "audio_adapter_cpu_offload", False),
             "vae_cpu_offload": getattr(config, "vae_cpu_offload", False),
             "use_tiling_vae": getattr(config, "use_tiling_vae", False),
             "unload_after_inference": getattr(config, "unload_after_inference", False),
@@ -368,9 +354,7 @@ class LoRAChainBuilder:
     """Builder for LoRA chain configurations."""
 
     @staticmethod
-    def build_chain(
-        lora_name: str, strength: float, existing_chain: Optional[List[Dict]] = None
-    ) -> List[Dict]:
+    def build_chain(lora_name: str, strength: float, existing_chain: Optional[List[Dict]] = None) -> List[Dict]:
         """Build or extend a LoRA chain."""
         if existing_chain is None:
             chain = []

@@ -12,3 +12,17 @@ Repository = "https://github.com/ModelTC/ComfyUI-Lightx2vWrapper"
 PublisherId = "gaclove"
 DisplayName = "ComfyUI-Lightx2vWrapper"
 Icon = ""
+
+[tool.ruff]
+target-version = "py311"
+line-length = 150
+indent-width = 4
+
+[tool.ruff.lint]
+extend-select = ["I", "F401"]
+ignore = ["F"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"**/lightx2v_kernel/*" = ["F401"]
+"**/{cookbook,docs}/*" = ["E402", "F401", "F811", "F841"]

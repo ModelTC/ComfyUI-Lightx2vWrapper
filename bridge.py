@@ -61,9 +61,7 @@ def get_available_quant_ops():
 
     # Prefer q8f for Ada architecture GPUs
     if is_ada_architecture_gpu():
-        q8f_available = next(
-            (op for op in available_ops if op[0] == "q8f" and op[1]), None
-        )
+        q8f_available = next((op for op in available_ops if op[0] == "q8f" and op[1]), None)
         if q8f_available:
             available_ops.remove(q8f_available)
             available_ops.insert(0, q8f_available)
@@ -269,9 +267,7 @@ class ModularConfigManager:
         self._available_attn_ops = None
         self._available_quant_ops = None
 
-    def _get_available_ops(
-        self, ops_list: List[Tuple[str, bool]], fallback: str = None
-    ) -> List[str]:
+    def _get_available_ops(self, ops_list: List[Tuple[str, bool]], fallback: str = None) -> List[str]:
         available = [op_name for op_name, is_available in ops_list if is_available]
         if fallback and fallback not in available:
             available.append(fallback)
@@ -291,9 +287,7 @@ class ModularConfigManager:
             self._available_quant_ops = get_available_quant_ops()
         return self._get_available_ops(self._available_quant_ops)
 
-    def _update_from_config(
-        self, updates: Dict, config: Dict, mappings: Dict[str, str]
-    ) -> None:
+    def _update_from_config(self, updates: Dict, config: Dict, mappings: Dict[str, str]) -> None:
         for config_key, update_key in mappings.items():
             if config_key in config:
                 if config_key == "seed" and config[config_key] == -1:
@@ -334,9 +328,7 @@ class ModularConfigManager:
         if "wan2.2" in config["model_cls"]:
             updates["use_image_encoder"] = False
 
-        attention_type = config.get(
-            "attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE
-        )
+        attention_type = config.get("attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE)
         for attn_key in [
             "attention_type",
             "self_attn_1_type",
@@ -356,9 +348,7 @@ class ModularConfigManager:
 
         return updates
 
-    def apply_teacache_config(
-        self, config: Dict[str, Any], model_info: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def apply_teacache_config(self, config: Dict[str, Any], model_info: Dict[str, Any]) -> Dict[str, Any]:
         """Apply TeaCache configuration."""
         updates = {}
 
@@ -374,9 +364,7 @@ class ModularConfigManager:
                 model_info.get("target_height", 480),
             )
 
-            coeffs = CoefficientCalculator.get_coefficients(
-                task, model_size, resolution, updates["use_ret_steps"]
-            )
+            coeffs = CoefficientCalculator.get_coefficients(task, model_size, resolution, updates["use_ret_steps"])
             updates["coefficients"] = coeffs
         else:
             updates["feature_caching"] = "NoCaching"
@@ -451,9 +439,7 @@ class ModularConfigManager:
         }
 
         for config_key, update_key in direct_mappings.items():
-            updates[update_key] = config.get(
-                config_key, config.get("cpu_offload", False)
-            )
+            updates[update_key] = config.get(config_key, config.get("cpu_offload", False))
 
         if updates.get("rotary_chunk"):
             updates["rotary_chunk_size"] = config.get("rotary_chunk_size", 100)
@@ -467,9 +453,7 @@ class ModularConfigManager:
             )
 
         if updates.get("t5_cpu_offload"):
-            updates["t5_offload_granularity"] = config.get(
-                "t5_offload_granularity", "model"
-            )
+            updates["t5_offload_granularity"] = config.get("t5_offload_granularity", "model")
 
         return updates
 
@@ -500,9 +484,7 @@ class ModularConfigManager:
             final_config.update(memory_updates)
 
         if "teacache" in configs:
-            teacache_updates = self.apply_teacache_config(
-                configs["teacache"], final_config
-            )
+            teacache_updates = self.apply_teacache_config(configs["teacache"], final_config)
             final_config.update(teacache_updates)
 
         if "quantization" in configs:

@@ -289,9 +289,7 @@ class LightX2VTeaCache:
 
     def create_config(self, enable, threshold, use_ret_steps):
         """Create TeaCache configuration."""
-        config = TeaCacheConfig(
-            enable=enable, threshold=threshold, use_ret_steps=use_ret_steps
-        )
+        config = TeaCacheConfig(enable=enable, threshold=threshold, use_ret_steps=use_ret_steps)
         return (config.to_dict(),)
 
 
@@ -523,9 +521,7 @@ class LightX2VLoRALoader:
 
     def load_lora(self, lora_name, strength, lora_chain=None):
         """Load and chain LoRA configurations."""
-        chain = LoRAChainBuilder.build_chain(
-            lora_name=lora_name, strength=strength, existing_chain=lora_chain
-        )
+        chain = LoRAChainBuilder.build_chain(lora_name=lora_name, strength=strength, existing_chain=lora_chain)
         return (chain,)
 
 
@@ -558,9 +554,7 @@ class TalkObjectInput:
         """Create a talk object from input data."""
         builder = TalkObjectConfigBuilder()
 
-        talk_object = builder.build_from_input(
-            name=name, audio=audio, mask=mask, save_to_input=save_to_input
-        )
+        talk_object = builder.build_from_input(name=name, audio=audio, mask=mask, save_to_input=save_to_input)
 
         if talk_object:
             return (talk_object,)
@@ -726,26 +720,10 @@ class LightX2VConfigCombiner:
         # Convert dict configs back to objects if needed
 
         # Create objects from dicts
-        inf_config = (
-            InferenceConfig(**inference_config)
-            if isinstance(inference_config, dict)
-            else None
-        )
-        tea_config = (
-            TeaCacheConfig(**teacache_config)
-            if teacache_config and isinstance(teacache_config, dict)
-            else None
-        )
-        quant_config = (
-            QuantizationConfig(**quantization_config)
-            if quantization_config and isinstance(quantization_config, dict)
-            else None
-        )
-        mem_config = (
-            MemoryOptimizationConfig(**memory_config)
-            if memory_config and isinstance(memory_config, dict)
-            else None
-        )
+        inf_config = InferenceConfig(**inference_config) if isinstance(inference_config, dict) else None
+        tea_config = TeaCacheConfig(**teacache_config) if teacache_config and isinstance(teacache_config, dict) else None
+        quant_config = QuantizationConfig(**quantization_config) if quantization_config and isinstance(quantization_config, dict) else None
+        mem_config = MemoryOptimizationConfig(**memory_config) if memory_config and isinstance(memory_config, dict) else None
 
         config = self.config_builder.combine_configs(
             inference_config=inf_config,
@@ -839,11 +817,7 @@ class LightX2VModularInference:
                 logging.info(f"Image saved to {temp_path}")
 
             # Handle audio input for seko models
-            if (
-                audio is not None
-                and hasattr(config, "model_cls")
-                and "seko" in config.model_cls
-            ):
+            if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
                 temp_path = self.temp_manager.create_temp_file(suffix=".wav")
                 self.audio_handler.save(audio, temp_path)
                 config.audio_path = temp_path
@@ -870,52 +844,34 @@ class LightX2VModularInference:
                 for obj in processed_talk_objects:
                     if "audio" in obj and obj["audio"]:
                         audio_path = obj["audio"]
-                        if not os.path.isabs(audio_path) and not audio_path.startswith(
-                            "/tmp"
-                        ):
+                        if not os.path.isabs(audio_path) and not audio_path.startswith("/tmp"):
                             obj["audio"] = self.resolver.resolve_input_path(audio_path)
-                            logging.info(
-                                f"Resolved audio path: {audio_path} -> {obj['audio']}"
-                            )
+                            logging.info(f"Resolved audio path: {audio_path} -> {obj['audio']}")
                         if not os.path.exists(obj["audio"]):
                             logging.warning(f"Audio file not found: {obj['audio']}")
 
                     if "mask" in obj and obj["mask"]:
                         mask_path = obj["mask"]
-                        if not os.path.isabs(mask_path) and not mask_path.startswith(
-                            "/tmp"
-                        ):
+                        if not os.path.isabs(mask_path) and not mask_path.startswith("/tmp"):
                             obj["mask"] = self.resolver.resolve_input_path(mask_path)
-                            logging.info(
-                                f"Resolved mask path: {mask_path} -> {obj['mask']}"
-                            )
+                            logging.info(f"Resolved mask path: {mask_path} -> {obj['mask']}")
                         if not os.path.exists(obj["mask"]):
                             logging.warning(f"Mask file not found: {obj['mask']}")
 
                 if processed_talk_objects:
                     config.talk_objects = processed_talk_objects
-                    logging.info(
-                        f"Processed {len(processed_talk_objects)} talk objects"
-                    )
+                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
 
-            logging.info(
-                "lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False)
-            )
+            logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
             config_hash = self._get_config_hash(config)
 
             current_runner = getattr(self.__class__, "_current_runner", None)
             current_config_hash = getattr(self.__class__, "_current_config_hash", None)
 
-            needs_reinit = (
-                current_runner is None
-                or current_config_hash != config_hash
-                or getattr(config, "lazy_load", False)
-            )
+            needs_reinit = current_runner is None or current_config_hash != config_hash or getattr(config, "lazy_load", False)
 
-            logging.info(
-                f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}"
-            )
+            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}")
             if needs_reinit:
                 if current_runner is not None:
                     # current_runner.end_run()

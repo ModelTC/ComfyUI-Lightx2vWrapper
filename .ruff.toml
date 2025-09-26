@@ -1,4 +1,0 @@
-line-length = 150
-indent-width = 4
-
-lint.extend-select = ["I"]
