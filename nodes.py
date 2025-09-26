@@ -985,7 +985,7 @@ class LightX2VConfigCombinerV2:
                     {"tooltip": "Memory optimization configuration"},
                 ),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
-                "talk_objects_config": ("TALK_OBJECTS", {"tooltip": "Talk objects configuration"}),
+                "talk_objects_config": ("TALK_OBJECTS_CONFIG", {"tooltip": "Talk objects configuration"}),
                 "image": ("IMAGE", {"tooltip": "Input image for i2v task"}),
                 "audio": (
                     "AUDIO",
