@@ -159,6 +159,7 @@ class LightX2VDefaultConfig:
         "audio_sr": 16000,
         "return_video": True,
         "talk_objects": None,
+        "boundary_step_index": 2,
     }
 
 
@@ -322,9 +323,9 @@ class ModularConfigManager:
             updates["sample_guide_scale"] = config["cfg_scale"]
             updates["enable_cfg"] = config["cfg_scale"] != 1.0
 
-        if config["model_cls"] == "wan2.2_moe":
-            updates["sample_guide_scale"] = [config["cfg_scale2"], config["cfg_scale2"]]
+        if "wan2.2_moe" in config["model_cls"]:
             updates["boundary"] = 0.9
+            updates["sample_guide_scale"] = [config["cfg_scale"], config["cfg_scale2"]]
         if "wan2.2" in config["model_cls"]:
             updates["use_image_encoder"] = False
 

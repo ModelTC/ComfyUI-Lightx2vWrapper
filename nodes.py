@@ -919,9 +919,14 @@ class LightX2VModularInference:
             if hasattr(current_runner, "set_progress_callback"):
                 current_runner.set_progress_callback(update_progress)
 
-            result_dict = current_runner.run_pipeline()
+            result_dict = current_runner.run_pipeline(save_video=False)
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
+
+            if images is not None and images.numel() > 0:
+                images = images.cpu()
+                if images.dtype != torch.float32:
+                    images = images.float()
 
             if getattr(config, "unload_after_inference", False):
                 if hasattr(self.__class__, "_current_runner"):
@@ -1199,9 +1204,14 @@ class LightX2VModularInferenceV2:
             if hasattr(current_runner, "set_progress_callback"):
                 current_runner.set_progress_callback(update_progress)
 
-            result_dict = current_runner.run_pipeline()
+            result_dict = current_runner.run_pipeline(save_video=False)
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
+
+            if images is not None and images.numel() > 0:
+                images = images.cpu()
+                if images.dtype != torch.float32:
+                    images = images.float()
 
             if getattr(config, "unload_after_inference", False):
                 if hasattr(self.__class__, "_current_runner"):
