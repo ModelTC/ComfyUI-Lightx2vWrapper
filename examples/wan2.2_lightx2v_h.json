@@ -1,0 +1,450 @@
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "revision": 0,
+  "last_node_id": 55,
+  "last_link_id": 59,
+  "nodes": [
+    {
+      "id": 10,
+      "type": "LightX2VQuantization",
+      "pos": [
+        -2115.796630859375,
+        -282.90557861328125
+      ],
+      "size": [
+        290.09375,
+        154
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "quantization_config",
+          "type": "QUANT_CONFIG",
+          "links": [
+            52
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VQuantization"
+      },
+      "widgets_values": [
+        "sgl",
+        "fp8",
+        "fp8",
+        "fp16",
+        "fp8"
+      ]
+    },
+    {
+      "id": 19,
+      "type": "LoadImage",
+      "pos": [
+        -1714.1234130859375,
+        -20.190126419067383
+      ],
+      "size": [
+        274.080078125,
+        314.0000305175781
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            57
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "加载图像",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "input (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 21,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        -1236.06640625,
+        -257.72991943359375
+      ],
+      "size": [
+        390.9510192871094,
+        334
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 56
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 16,
+        "loop_count": 0,
+        "filename_prefix": "vigen-15ebb023",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "vigen-15ebb023_00111.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 16,
+            "workflow": "vigen-15ebb023_00111.png",
+            "fullpath": "/mnt/aigc/users/gaopeng1/ComfyUI/output/vigen-15ebb023_00111.mp4"
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "LightX2VInferenceConfig",
+      "pos": [
+        -2410.2958984375,
+        -347.2873229980469
+      ],
+      "size": [
+        270,
+        490
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "inference_config",
+          "type": "INFERENCE_CONFIG",
+          "links": [
+            51
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VInferenceConfig"
+      },
+      "widgets_values": [
+        "wan2.2_moe_distill",
+        "Wan2.2-I2V-A14B-distill-fp8",
+        "i2v",
+        4,
+        222869388,
+        "randomize",
+        1,
+        1,
+        5,
+        1280,
+        720,
+        5,
+        "flash_attn3",
+        "1000,750,500,250",
+        "adaptive",
+        "720p",
+        81,
+        5,
+        false
+      ]
+    },
+    {
+      "id": 51,
+      "type": "LightX2VMemoryOptimization",
+      "pos": [
+        -2113.802490234375,
+        -65.72712707519531
+      ],
+      "size": [
+        311.908203125,
+        370
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "memory_config",
+          "type": "MEMORY_CONFIG",
+          "links": [
+            53
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VMemoryOptimization"
+      },
+      "widgets_values": [
+        false,
+        100,
+        false,
+        true,
+        "block",
+        1,
+        false,
+        "model",
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": 52,
+      "type": "LightX2VConfigCombinerV2",
+      "pos": [
+        -1720.9281005859375,
+        -361.9546813964844
+      ],
+      "size": [
+        400,
+        282
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "inference_config",
+          "type": "INFERENCE_CONFIG",
+          "link": 51
+        },
+        {
+          "name": "teacache_config",
+          "shape": 7,
+          "type": "TEACACHE_CONFIG",
+          "link": null
+        },
+        {
+          "name": "quantization_config",
+          "shape": 7,
+          "type": "QUANT_CONFIG",
+          "link": 52
+        },
+        {
+          "name": "memory_config",
+          "shape": 7,
+          "type": "MEMORY_CONFIG",
+          "link": 53
+        },
+        {
+          "name": "lora_chain",
+          "shape": 7,
+          "type": "LORA_CHAIN",
+          "link": null
+        },
+        {
+          "name": "talk_objects_config",
+          "shape": 7,
+          "type": "TALK_OBJECTS_CONFIG",
+          "link": null
+        },
+        {
+          "name": "image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 57
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prepared_config",
+          "type": "PREPARED_CONFIG",
+          "links": [
+            55
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VConfigCombinerV2"
+      },
+      "widgets_values": [
+        "The cow feature the person is talking.",
+        ""
+      ]
+    },
+    {
+      "id": 53,
+      "type": "LightX2VModularInferenceV2",
+      "pos": [
+        -1232.5400390625,
+        -354.8329772949219
+      ],
+      "size": [
+        234.46444702148438,
+        46
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prepared_config",
+          "type": "PREPARED_CONFIG",
+          "link": 55
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            56
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VModularInferenceV2"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      51,
+      23,
+      0,
+      52,
+      0,
+      "INFERENCE_CONFIG"
+    ],
+    [
+      52,
+      10,
+      0,
+      52,
+      2,
+      "QUANT_CONFIG"
+    ],
+    [
+      53,
+      51,
+      0,
+      52,
+      3,
+      "MEMORY_CONFIG"
+    ],
+    [
+      55,
+      52,
+      0,
+      53,
+      0,
+      "PREPARED_CONFIG"
+    ],
+    [
+      56,
+      53,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      57,
+      19,
+      0,
+      52,
+      6,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 2,
+      "title": "Infer",
+      "bounding": [
+        -2421.39599609375,
+        -422.0833740234375,
+        1652.6817626953125,
+        893.2465209960938
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7513148009015777,
+      "offset": [
+        2717.6156091040034,
+        642.5150759820887
+      ]
+    },
+    "frontendVersion": "1.23.4",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

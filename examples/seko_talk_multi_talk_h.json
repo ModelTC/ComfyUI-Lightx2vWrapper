@@ -1,0 +1,1090 @@
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "revision": 0,
+  "last_node_id": 50,
+  "last_link_id": 49,
+  "nodes": [
+    {
+      "id": 10,
+      "type": "LightX2VQuantization",
+      "pos": [
+        -1762.8299560546875,
+        168.4596710205078
+      ],
+      "size": [
+        290.09375,
+        154
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "quantization_config",
+          "type": "QUANT_CONFIG",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VQuantization"
+      },
+      "widgets_values": [
+        "sgl",
+        "fp8",
+        "fp8",
+        "fp16",
+        "fp8"
+      ]
+    },
+    {
+      "id": 11,
+      "type": "LightX2VConfigCombiner",
+      "pos": [
+        -1207.53271484375,
+        111.63562774658203
+      ],
+      "size": [
+        239.138671875,
+        126
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "inference_config",
+          "type": "INFERENCE_CONFIG",
+          "link": 11
+        },
+        {
+          "name": "teacache_config",
+          "shape": 7,
+          "type": "TEACACHE_CONFIG",
+          "link": null
+        },
+        {
+          "name": "quantization_config",
+          "shape": 7,
+          "type": "QUANT_CONFIG",
+          "link": 12
+        },
+        {
+          "name": "memory_config",
+          "shape": 7,
+          "type": "MEMORY_CONFIG",
+          "link": null
+        },
+        {
+          "name": "lora_chain",
+          "shape": 7,
+          "type": "LORA_CHAIN",
+          "link": null
+        },
+        {
+          "name": "talk_objects_config",
+          "shape": 7,
+          "type": "TALK_OBJECTS_CONFIG",
+          "link": 49
+        }
+      ],
+      "outputs": [
+        {
+          "name": "combined_config",
+          "type": "COMBINED_CONFIG",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VConfigCombiner"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 12,
+      "type": "LightX2VModularInference",
+      "pos": [
+        -818.747802734375,
+        89.00883483886719
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "combined_config",
+          "type": "COMBINED_CONFIG",
+          "link": 13
+        },
+        {
+          "name": "image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 14
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            31
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VModularInference"
+      },
+      "widgets_values": [
+        "The video feature the person is talking.",
+        "low quality,blurry,pixelated,low resolution,noise,artifacts,poor lighting, overexposed, underexposed, distorted, unnatural, deformed, weird,scared,anatomy,mutated, wrong proportions, extra limbs,floating objects, disconnected, gravity-defying, impossible shadows,wrong lighting,non-existent reflections,inconsistent perspective, repetitive, monotonous, monotonous, generic, watermark, ugly, high contrast, bad photo, font, username, error, logo, words, letters, digits, autograph, trademark, name, twisted face, (poorly drawn hands, malformed hands, missing fingers, unnatural hand positions, blur hand, multiple fingers, multiple arms), static, naked, artifacts, oversaturated"
+      ]
+    },
+    {
+      "id": 19,
+      "type": "LoadImage",
+      "pos": [
+        -1214.134033203125,
+        291.4210510253906
+      ],
+      "size": [
+        274.080078125,
+        314
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            14
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "加载图像",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "input (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 20,
+      "type": "LoadAudio",
+      "pos": [
+        -1618.51171875,
+        526.3804931640625
+      ],
+      "size": [
+        274.080078125,
+        136
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "title": "加载音频",
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "15.wav",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 21,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        -808.9989624023438,
+        337.51959228515625
+      ],
+      "size": [
+        390.9510192871094,
+        556.6599731445312
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 31
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 18
+        },
+        {
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 16,
+        "loop_count": 0,
+        "filename_prefix": "vigen-15ebb023",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "vigen-15ebb023_00092-audio.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 16,
+            "workflow": "vigen-15ebb023_00092.png",
+            "fullpath": "/mnt/aigc/users/gaopeng1/ComfyUI/output/vigen-15ebb023_00092-audio.mp4"
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "LightX2VInferenceConfig",
+      "pos": [
+        -2050.729248046875,
+        87.57786560058594
+      ],
+      "size": [
+        270,
+        490
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "inference_config",
+          "type": "INFERENCE_CONFIG",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VInferenceConfig"
+      },
+      "widgets_values": [
+        "seko_talk",
+        "Wan2.1-R2V0909-Audio-14B-720P-fp8",
+        "i2v",
+        4,
+        584734195,
+        "randomize",
+        1,
+        1,
+        5,
+        1280,
+        720,
+        5,
+        "flash_attn3",
+        "",
+        "adaptive",
+        "720p",
+        81,
+        5,
+        false
+      ]
+    },
+    {
+      "id": 34,
+      "type": "easy showAnything",
+      "pos": [
+        -508.2369079589844,
+        -330.85296630859375
+      ],
+      "size": [
+        511.8559875488281,
+        291.96728515625
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "anything",
+          "shape": 7,
+          "type": "*",
+          "link": 42
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "*",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy showAnything"
+      },
+      "widgets_values": [
+        "TalkObjectsConfig(talk_objects=[{'name': 'person_1', 'audio': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_audio.wav', 'mask': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_mask.png', 'source_type': 'file'}, {'name': 'person_1', 'audio': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_audio.wav', 'mask': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_mask.png', 'source_type': 'file'}])"
+      ]
+    },
+    {
+      "id": 36,
+      "type": "LoadAudio",
+      "pos": [
+        -1744.6435546875,
+        -527.583740234375
+      ],
+      "size": [
+        274.080078125,
+        136
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            38
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "p2.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 38,
+      "type": "LoadImageMask",
+      "pos": [
+        -1767.2237548828125,
+        -486.9224548339844
+      ],
+      "size": [
+        274.080078125,
+        318.0000305175781
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            39
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImageMask"
+      },
+      "widgets_values": [
+        "input_p2_mask.png",
+        "red",
+        "image"
+      ]
+    },
+    {
+      "id": 39,
+      "type": "LoadImageMask",
+      "pos": [
+        -2051.389892578125,
+        -678.3258056640625
+      ],
+      "size": [
+        274.080078125,
+        318
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            36
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImageMask"
+      },
+      "widgets_values": [
+        "input_p1_mask.png",
+        "red",
+        "image"
+      ]
+    },
+    {
+      "id": 41,
+      "type": "LoadAudio",
+      "pos": [
+        -1468.0582275390625,
+        -386.4920654296875
+      ],
+      "size": [
+        274.080078125,
+        136
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            44
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "15.wav",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 42,
+      "type": "LoadImageMask",
+      "pos": [
+        -1477.0850830078125,
+        -332.2462463378906
+      ],
+      "size": [
+        274.080078125,
+        318
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            45
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImageMask"
+      },
+      "widgets_values": [
+        "input_p3_mask.png",
+        "red",
+        "image"
+      ]
+    },
+    {
+      "id": 43,
+      "type": "LightX2VTalkObjectsCombiner",
+      "pos": [
+        -499.1440734863281,
+        -672.7076416015625
+      ],
+      "size": [
+        241.43710327148438,
+        206
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "talk_object_1",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": 37
+        },
+        {
+          "name": "talk_object_2",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": 41
+        },
+        {
+          "name": "talk_object_3",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_4",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_5",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_6",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_7",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_8",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_9",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        },
+        {
+          "name": "talk_object_10",
+          "shape": 7,
+          "type": "TALK_OBJECT",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "talk_objects_config",
+          "type": "TALK_OBJECTS_CONFIG",
+          "links": [
+            42,
+            48
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VTalkObjectsCombiner"
+      }
+    },
+    {
+      "id": 44,
+      "type": "LightX2VTalkObjectInput",
+      "pos": [
+        -939.478271484375,
+        -734.2320556640625
+      ],
+      "size": [
+        317.0162048339844,
+        102
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 47
+        },
+        {
+          "name": "mask",
+          "shape": 7,
+          "type": "MASK",
+          "link": 36
+        }
+      ],
+      "outputs": [
+        {
+          "name": "talk_object",
+          "type": "TALK_OBJECT",
+          "links": [
+            37
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VTalkObjectInput"
+      },
+      "widgets_values": [
+        "person_1",
+        true
+      ]
+    },
+    {
+      "id": 45,
+      "type": "LightX2VTalkObjectInput",
+      "pos": [
+        -939.172119140625,
+        -565.5177612304688
+      ],
+      "size": [
+        317.0162048339844,
+        102
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 38
+        },
+        {
+          "name": "mask",
+          "shape": 7,
+          "type": "MASK",
+          "link": 39
+        }
+      ],
+      "outputs": [
+        {
+          "name": "talk_object",
+          "type": "TALK_OBJECT",
+          "links": [
+            41
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VTalkObjectInput"
+      },
+      "widgets_values": [
+        "person_1",
+        true
+      ]
+    },
+    {
+      "id": 46,
+      "type": "LightX2VTalkObjectInput",
+      "pos": [
+        -937.0840454101562,
+        -414.41925048828125
+      ],
+      "size": [
+        317.0162048339844,
+        102
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 44
+        },
+        {
+          "name": "mask",
+          "shape": 7,
+          "type": "MASK",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "talk_object",
+          "type": "TALK_OBJECT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VTalkObjectInput"
+      },
+      "widgets_values": [
+        "person_1",
+        true
+      ]
+    },
+    {
+      "id": 47,
+      "type": "LoadAudio",
+      "pos": [
+        -2008.4306640625,
+        -725.5494384765625
+      ],
+      "size": [
+        274.080078125,
+        136
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            47
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "p1.mp3",
+        null,
+        ""
+      ]
+    },
+    {
+      "id": 48,
+      "type": "SetNode",
+      "pos": [
+        -199.871337890625,
+        -578.7578735351562
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "TALK_OBJECTS_CONFIG",
+          "type": "TALK_OBJECTS_CONFIG",
+          "link": 48
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "Set_talk_objects",
+      "properties": {
+        "previousName": "talk_objects"
+      },
+      "widgets_values": [
+        "talk_objects"
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 50,
+      "type": "GetNode",
+      "pos": [
+        -1453.525390625,
+        249.66848754882812
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "TALK_OBJECTS_CONFIG",
+          "type": "TALK_OBJECTS_CONFIG",
+          "links": [
+            49
+          ]
+        }
+      ],
+      "title": "Get_talk_objects",
+      "properties": {},
+      "widgets_values": [
+        "talk_objects"
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    }
+  ],
+  "links": [
+    [
+      11,
+      23,
+      0,
+      11,
+      0,
+      "INFERENCE_CONFIG"
+    ],
+    [
+      12,
+      10,
+      0,
+      11,
+      2,
+      "QUANT_CONFIG"
+    ],
+    [
+      13,
+      11,
+      0,
+      12,
+      0,
+      "COMBINED_CONFIG"
+    ],
+    [
+      14,
+      19,
+      0,
+      12,
+      1,
+      "IMAGE"
+    ],
+    [
+      15,
+      20,
+      0,
+      12,
+      2,
+      "AUDIO"
+    ],
+    [
+      18,
+      12,
+      1,
+      21,
+      1,
+      "AUDIO"
+    ],
+    [
+      31,
+      12,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      36,
+      39,
+      0,
+      44,
+      1,
+      "MASK"
+    ],
+    [
+      37,
+      44,
+      0,
+      43,
+      0,
+      "TALK_OBJECT"
+    ],
+    [
+      38,
+      36,
+      0,
+      45,
+      0,
+      "AUDIO"
+    ],
+    [
+      39,
+      38,
+      0,
+      45,
+      1,
+      "MASK"
+    ],
+    [
+      41,
+      45,
+      0,
+      43,
+      1,
+      "TALK_OBJECT"
+    ],
+    [
+      42,
+      43,
+      0,
+      34,
+      0,
+      "*"
+    ],
+    [
+      44,
+      41,
+      0,
+      46,
+      0,
+      "AUDIO"
+    ],
+    [
+      45,
+      42,
+      0,
+      46,
+      1,
+      "MASK"
+    ],
+    [
+      47,
+      47,
+      0,
+      44,
+      0,
+      "AUDIO"
+    ],
+    [
+      48,
+      43,
+      0,
+      48,
+      0,
+      "*"
+    ],
+    [
+      49,
+      50,
+      0,
+      11,
+      5,
+      "TALK_OBJECTS_CONFIG"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Input",
+      "bounding": [
+        -2061.389892578125,
+        -807.83203125,
+        2084.259521484375,
+        813.2489013671875
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Infer",
+      "bounding": [
+        -2060.729248046875,
+        11.681816101074219,
+        1652.6817626953125,
+        893.2465209960938
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6209213230591553,
+      "offset": [
+        2524.129024444816,
+        799.7950517602292
+      ]
+    },
+    "frontendVersion": "1.23.4",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
