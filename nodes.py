@@ -30,6 +30,8 @@ from .file_handlers import (
     TempFileManager,
 )
 from .lightx2v.lightx2v.infer import init_runner
+from .lightx2v.lightx2v.utils.input_info import set_input_info
+from .lightx2v.lightx2v.utils.set_config import set_config
 from .model_utils import scan_loras, scan_models, support_model_cls_list
 
 
@@ -62,10 +64,10 @@ class LightX2VInferenceConfig:
                     },
                 ),
                 "task": (
-                    ["t2v", "i2v"],
+                    ["t2v", "i2v", "s2v"],
                     {
                         "default": "i2v",
-                        "tooltip": "Task type: text-to-video or image-to-video",
+                        "tooltip": "Task type: text-to-video or image-to-video or audio-to-video",
                     },
                 ),
                 "infer_steps": (
@@ -767,10 +769,10 @@ class LightX2VModularInference:
                 ),
             },
             "optional": {
-                "image": ("IMAGE", {"tooltip": "Input image for i2v task"}),
+                "image": ("IMAGE", {"tooltip": "Input image for i2v or s2v task"}),
                 "audio": (
                     "AUDIO",
-                    {"tooltip": "Input audio for audio-driven generation"},
+                    {"tooltip": "Input audio for audio-driven generation for s2v task"},
                 ),
             },
         }
@@ -798,12 +800,12 @@ class LightX2VModularInference:
         config.prompt = prompt
         config.negative_prompt = negative_prompt
 
-        if config.task == "i2v" and image is None:
-            raise ValueError("i2v task requires input image")
+        if config.task in ["i2v", "s2v"] and image is None:
+            raise ValueError(f"{config.task} task requires input image")
 
         try:
             # Handle image input
-            if config.task == "i2v" and image is not None:
+            if config.task in ["i2v", "s2v"] and image is not None:
                 image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
                 pil_image = Image.fromarray(image_np)
 
@@ -900,14 +902,9 @@ class LightX2VModularInference:
                     del self.__class__._current_runner
                     torch.cuda.empty_cache()
                     gc.collect()
-
-                self.__class__._current_runner = init_runner(config)
+                formated_config = set_config(config)
+                self.__class__._current_runner = init_runner(formated_config)
                 self.__class__._current_config_hash = config_hash
-            else:
-                if hasattr(current_runner, "config"):
-                    current_runner.config = config
-                    current_runner.model.config = config
-                    current_runner.model.scheduler.config = config
 
             progress = ProgressBar(100)
 
@@ -919,7 +916,12 @@ class LightX2VModularInference:
             if hasattr(current_runner, "set_progress_callback"):
                 current_runner.set_progress_callback(update_progress)
 
-            result_dict = current_runner.run_pipeline(save_video=False)
+            config["return_result_tensor"] = True
+            config["save_result_path"] = ""
+            config["negative_prompt"] = config.get("negative_prompt", "")
+            input_info = set_input_info(config)
+            current_runner.set_config(config)
+            result_dict = current_runner.run_pipeline(input_info)
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
 
@@ -991,10 +993,10 @@ class LightX2VConfigCombinerV2:
                 ),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
                 "talk_objects_config": ("TALK_OBJECTS_CONFIG", {"tooltip": "Talk objects configuration"}),
-                "image": ("IMAGE", {"tooltip": "Input image for i2v task"}),
+                "image": ("IMAGE", {"tooltip": "Input image for i2v or s2v task"}),
                 "audio": (
                     "AUDIO",
-                    {"tooltip": "Input audio for audio-driven generation"},
+                    {"tooltip": "Input audio for audio-driven generation for s2v task"},
                 ),
             },
         }
@@ -1042,11 +1044,11 @@ class LightX2VConfigCombinerV2:
         config.negative_prompt = negative_prompt
 
         # Validate task requirements
-        if config.task == "i2v" and image is None:
-            raise ValueError("i2v task requires input image")
+        if config.task in ["i2v", "s2v"] and image is None:
+            raise ValueError("i2v or s2v task requires input image")
 
         # Handle image input
-        if config.task == "i2v" and image is not None:
+        if config.task in ["i2v", "s2v"] and image is not None:
             image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
             pil_image = Image.fromarray(image_np)
 
@@ -1124,8 +1126,13 @@ class LightX2VConfigCombinerV2:
                         logging.warning(f"Mask file not found: {obj['mask']}")
 
             if processed_talk_objects:
-                config.talk_objects = processed_talk_objects
+                # config.talk_objects = processed_talk_objects
+                temp_dir = self.temp_manager.create_temp_dir()
+                with open(os.path.join(temp_dir, "config.json"), "w") as f:
+                    json.dump({"talk_objects": processed_talk_objects}, f)
+                config.audio_path = temp_dir
                 logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+            
 
         logging.info("lightx2v prepared config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
@@ -1185,26 +1192,28 @@ class LightX2VModularInferenceV2:
                     del self.__class__._current_runner
                     torch.cuda.empty_cache()
                     gc.collect()
-
-                self.__class__._current_runner = init_runner(config)
+                formatted_config =set_config(config)
+                self.__class__._current_runner = init_runner(formatted_config)
                 self.__class__._current_config_hash = config_hash
-            else:
-                if hasattr(current_runner, "config"):
-                    current_runner.config = config
-                    current_runner.model.config = config
-                    current_runner.model.scheduler.config = config
 
             progress = ProgressBar(100)
 
             def update_progress(current_step, _total):
                 progress.update_absolute(current_step)
 
-            current_runner = getattr(self.__class__, "_current_runner", None)
+            current_runner = self.__class__._current_runner
 
             if hasattr(current_runner, "set_progress_callback"):
                 current_runner.set_progress_callback(update_progress)
 
-            result_dict = current_runner.run_pipeline(save_video=False)
+            config["return_result_tensor"] = True
+            config["save_result_path"] = ""
+            config["negative_prompt"] = config.get("negative_prompt", "")
+            input_info = set_input_info(config)
+            current_runner.set_config(config)
+
+            result_dict = current_runner.run_pipeline(input_info)
+            
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
 

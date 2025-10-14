@@ -273,7 +273,6 @@ class ConfigBuilder:
 
     def __init__(self):
         self.manager = ModularConfigManager()
-        self.temp_manager = TempFileManager()
 
     def combine_configs(
         self,

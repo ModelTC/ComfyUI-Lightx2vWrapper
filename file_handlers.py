@@ -252,23 +252,12 @@ class MaskFileHandler(ImageFileHandler):
 
 
 class TempFileManager:
-    """Manager for temporary files with automatic cleanup."""
-
     def __init__(self):
         self.temp_files: List[str] = []
+        self.temp_dirs: List[str] = []
 
     @contextmanager
     def temp_file(self, suffix: str = "", prefix: str = "lightx2v_", delete: bool = True):
-        """Context manager for temporary file creation.
-
-        Args:
-            suffix: File suffix
-            prefix: File prefix
-            delete: Whether to delete on exit
-
-        Yields:
-            Path to temporary file
-        """
         temp_file = tempfile.NamedTemporaryFile(suffix=suffix, prefix=prefix, delete=False)
         temp_path = temp_file.name
         temp_file.close()
@@ -282,15 +271,6 @@ class TempFileManager:
                 self.cleanup_file(temp_path)
 
     def create_temp_file(self, suffix: str = "", prefix: str = "lightx2v_") -> str:
-        """Create a temporary file that will be tracked for cleanup.
-
-        Args:
-            suffix: File suffix
-            prefix: File prefix
-
-        Returns:
-            Path to temporary file
-        """
         with tempfile.NamedTemporaryFile(suffix=suffix, prefix=prefix, delete=False) as tmp:
             temp_path = tmp.name
 
@@ -298,7 +278,6 @@ class TempFileManager:
         return temp_path
 
     def cleanup_file(self, path: str):
-        """Clean up a specific file."""
         if path in self.temp_files:
             self.temp_files.remove(path)
 
@@ -309,15 +288,46 @@ class TempFileManager:
             except Exception as e:
                 logging.warning(f"Failed to clean up {path}: {e}")
 
+    @contextmanager
+    def temp_dir(self, suffix: str = "", prefix: str = "lightx2v_", delete: bool = True):
+        temp_dir = tempfile.mkdtemp(suffix=suffix, prefix=prefix)
+        self.temp_dirs.append(temp_dir)
+
+        try:
+            yield temp_dir
+        finally:
+            if delete:
+                self.cleanup_dir(temp_dir)
+
+
+    def create_temp_dir(self, suffix: str = "", prefix: str = "lightx2v_") -> str:
+        temp_dir = tempfile.mkdtemp(suffix=suffix, prefix=prefix)
+        self.temp_dirs.append(temp_dir)
+        return temp_dir
+
+
+    def cleanup_dir(self, path: str):
+        if path in self.temp_dirs:
+            self.temp_dirs.remove(path)
+
+        if os.path.exists(path):
+            try:
+                import shutil
+                shutil.rmtree(path)
+                logging.debug(f"Cleaned up temp directory: {path}")
+            except Exception as e:
+                logging.warning(f"Failed to clean up directory {path}: {e}")
+
     def cleanup_all(self):
-        """Clean up all tracked temporary files."""
         for temp_file in self.temp_files[:]:
             self.cleanup_file(temp_file)
-
         self.temp_files.clear()
 
+        for temp_dir in self.temp_dirs[:]:
+            self.cleanup_dir(temp_dir)
+        self.temp_dirs.clear()
+
     def __del__(self):
-        """Cleanup on deletion."""
         self.cleanup_all()
 
 
