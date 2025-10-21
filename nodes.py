@@ -350,7 +350,6 @@ class LightX2VQuantization:
 
     def create_config(
         self,
-        dit_quant_schema,
         dit_quant_scheme,
         t5_quant_scheme,
         clip_quant_scheme,
@@ -358,7 +357,6 @@ class LightX2VQuantization:
     ):
         """Create quantization configuration."""
         config = QuantizationConfig(
-            quant_op=quant_op,
             dit_quant_scheme=dit_quant_scheme,
             t5_quant_scheme=t5_quant_scheme,
             clip_quant_scheme=clip_quant_scheme,
