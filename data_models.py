@@ -95,15 +95,13 @@ class TeaCacheConfig:
 class QuantizationConfig:
     """Quantization configuration."""
 
-    quant_op: str = "none"
-    dit_quant_scheme: str = "bf16"
-    t5_quant_scheme: str = "bf16"
-    clip_quant_scheme: str = "fp16"
-    adapter_quant_scheme: str = "bf16"
+    dit_quant_scheme: str = "fp8-sgl"
+    t5_quant_scheme: str = "fp8-sgl"
+    clip_quant_scheme: str = "fp8-sgl"
+    adapter_quant_scheme: str = "fp8-sgl"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "quant_op": self.quant_op,
             "dit_quant_scheme": self.dit_quant_scheme,
             "t5_quant_scheme": self.t5_quant_scheme,
             "clip_quant_scheme": self.clip_quant_scheme,

@@ -125,6 +125,7 @@ class LightX2VDefaultConfig:
         "coefficients": None,
         "use_ret_steps": False,
         # Quantization
+        "dit_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["dit"],
         "t5_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["t5"],
         "clip_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["clip"],
         "adapter_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["adapter"],
@@ -372,24 +373,6 @@ class ModularConfigManager:
 
         return updates
 
-    def _get_mm_type(self, dit_scheme: str, quant_backend: str) -> str:
-        if dit_scheme == "bf16":
-            return "Default"
-
-        base_pattern = f"W-{dit_scheme}-channel-sym-A-{dit_scheme}-channel-sym-dynamic"
-
-        if quant_backend == "vllm":
-            return f"{base_pattern}-Vllm"
-        elif quant_backend == "sgl":
-            suffix = "-Sgl-ActVllm" if dit_scheme == "int8" else "-Sgl"
-            return f"{base_pattern}{suffix}"
-        elif quant_backend == "q8f":
-            return f"{base_pattern}-Q8F"
-        elif quant_backend == "torchao":
-            return f"{base_pattern}-Torchao"
-        else:
-            return "Default"
-
     def apply_quantization_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Apply quantization configuration."""
         updates = {}
@@ -399,26 +382,19 @@ class ModularConfigManager:
         t5_scheme = config.get("t5_quant_scheme", defaults["t5"])
         clip_scheme = config.get("clip_quant_scheme", defaults["clip"])
         adapter_scheme = config.get("adapter_quant_scheme", defaults["adapter"])
-        quant_backend = config.get("quant_op", "vllm")
 
         updates.update(
             {
-                "clip_quantized": clip_scheme != defaults["clip"],
+                "clip_quantized": clip_scheme != "none",
                 "clip_quant_scheme": clip_scheme,
+                "t5_quantized": t5_scheme != "none",
                 "t5_quant_scheme": t5_scheme,
-                "t5_quantized": t5_scheme != defaults["t5"],
-                "adapter_quantized": adapter_scheme != defaults["adapter"],
+                "dit_quantized": dit_scheme != "none",
+                "dit_quant_scheme": dit_scheme,
+                "adapter_quantized": adapter_scheme != "none",
                 "adapter_quant_scheme": adapter_scheme,
             }
         )
-
-        if updates.get("t5_quantized") and quant_backend == "q8f":
-            updates["t5_quant_scheme"] = f"{t5_scheme}-q8f"
-        if updates.get("clip_quantized") and quant_backend == "q8f":
-            updates["clip_quant_scheme"] = f"{clip_scheme}-q8f"
-
-        mm_type = self._get_mm_type(dit_scheme, quant_backend)
-        updates["mm_config"] = {"mm_type": mm_type}
 
         return updates
 

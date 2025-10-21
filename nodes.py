@@ -304,21 +304,14 @@ class LightX2VQuantization:
             if is_available:
                 quant_backends.append(op_name)
 
-        # Always have at least one option
-        if not quant_backends:
-            quant_backends = ["none"]
-
-        supported_quant_schemes = ["bf16", "fp16", "fp8", "int8"]
+        common_schema = ["fp8", "int8"]
+        supported_quant_schemes = ["none"]
+        for schema in common_schema:
+            for backend in quant_backends:
+                supported_quant_schemes.append(f"{schema}-{backend}")
 
         return {
             "required": {
-                "quant_op": (
-                    quant_backends,
-                    {
-                        "default": quant_backends[0],
-                        "tooltip": "Quantization computation backend",
-                    },
-                ),
                 "dit_quant_scheme": (
                     supported_quant_schemes,
                     {
@@ -357,7 +350,7 @@ class LightX2VQuantization:
 
     def create_config(
         self,
-        quant_op,
+        dit_quant_schema,
         dit_quant_scheme,
         t5_quant_scheme,
         clip_quant_scheme,
