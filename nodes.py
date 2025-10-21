@@ -1132,7 +1132,6 @@ class LightX2VConfigCombinerV2:
                     json.dump({"talk_objects": processed_talk_objects}, f)
                 config.audio_path = temp_dir
                 logging.info(f"Processed {len(processed_talk_objects)} talk objects")
-            
 
         logging.info("lightx2v prepared config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
@@ -1192,7 +1191,7 @@ class LightX2VModularInferenceV2:
                     del self.__class__._current_runner
                     torch.cuda.empty_cache()
                     gc.collect()
-                formatted_config =set_config(config)
+                formatted_config = set_config(config)
                 self.__class__._current_runner = init_runner(formatted_config)
                 self.__class__._current_config_hash = config_hash
 
@@ -1213,7 +1212,7 @@ class LightX2VModularInferenceV2:
             current_runner.set_config(config)
 
             result_dict = current_runner.run_pipeline(input_info)
-            
+
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
 

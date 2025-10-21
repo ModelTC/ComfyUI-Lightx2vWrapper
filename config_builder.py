@@ -24,7 +24,6 @@ from .file_handlers import (
     AudioFileHandler,
     ComfyUIFileResolver,
     MaskFileHandler,
-    TempFileManager,
 )
 from .model_utils import get_lora_full_path, get_model_full_path
 
@@ -162,6 +161,8 @@ class InferenceConfigBuilder:
         if "seko" in config.model_cls:
             config.video_length = optional_params.get("segment_length", 81)
             config.use_31_block = False
+            if "2.5" in config.model_path:
+                config.use_31_block = True
             if "prev_frame_length" in optional_params:
                 config.prev_frame_length = optional_params["prev_frame_length"]
 

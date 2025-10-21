@@ -299,12 +299,10 @@ class TempFileManager:
             if delete:
                 self.cleanup_dir(temp_dir)
 
-
     def create_temp_dir(self, suffix: str = "", prefix: str = "lightx2v_") -> str:
         temp_dir = tempfile.mkdtemp(suffix=suffix, prefix=prefix)
         self.temp_dirs.append(temp_dir)
         return temp_dir
-
 
     def cleanup_dir(self, path: str):
         if path in self.temp_dirs:
@@ -313,6 +311,7 @@ class TempFileManager:
         if os.path.exists(path):
             try:
                 import shutil
+
                 shutil.rmtree(path)
                 logging.debug(f"Cleaned up temp directory: {path}")
             except Exception as e:
