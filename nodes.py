@@ -305,7 +305,7 @@ class LightX2VQuantization:
                 quant_backends.append(op_name)
 
         common_schema = ["fp8", "int8"]
-        supported_quant_schemes = ["none"]
+        supported_quant_schemes = ["Default"]
         for schema in common_schema:
             for backend in quant_backends:
                 supported_quant_schemes.append(f"{schema}-{backend}")
@@ -329,7 +329,7 @@ class LightX2VQuantization:
                 "clip_quant_scheme": (
                     supported_quant_schemes,
                     {
-                        "default": supported_quant_schemes[1],
+                        "default": supported_quant_schemes[0],
                         "tooltip": "CLIP encoder quantization precision",
                     },
                 ),

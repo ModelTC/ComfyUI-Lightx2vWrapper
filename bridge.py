@@ -85,10 +85,10 @@ class LightX2VDefaultConfig:
 
     DEFAULT_ATTENTION_TYPE = "flash_attn3"
     DEFAULT_QUANTIZATION_SCHEMES = {
-        "dit": "bf16",
-        "t5": "bf16",
-        "clip": "fp16",
-        "adapter": "bf16",
+        "dit": "Default",
+        "t5": "Default",
+        "clip": "Default",
+        "adapter": "Default",
     }
     DEFAULT_VIDEO_PARAMS = {
         "height": 480,
@@ -385,13 +385,13 @@ class ModularConfigManager:
 
         updates.update(
             {
-                "clip_quantized": clip_scheme != "none",
+                "clip_quantized": clip_scheme != "Default",
                 "clip_quant_scheme": clip_scheme,
-                "t5_quantized": t5_scheme != "none",
+                "t5_quantized": t5_scheme != "Default",
                 "t5_quant_scheme": t5_scheme,
-                "dit_quantized": dit_scheme != "none",
+                "dit_quantized": dit_scheme != "Default",
                 "dit_quant_scheme": dit_scheme,
-                "adapter_quantized": adapter_scheme != "none",
+                "adapter_quantized": adapter_scheme != "Default",
                 "adapter_quant_scheme": adapter_scheme,
             }
         )

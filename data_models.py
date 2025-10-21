@@ -95,10 +95,10 @@ class TeaCacheConfig:
 class QuantizationConfig:
     """Quantization configuration."""
 
-    dit_quant_scheme: str = "fp8-sgl"
-    t5_quant_scheme: str = "fp8-sgl"
-    clip_quant_scheme: str = "fp8-sgl"
-    adapter_quant_scheme: str = "fp8-sgl"
+    dit_quant_scheme: str = "Default"
+    t5_quant_scheme: str = "Default"
+    clip_quant_scheme: str = "Default"
+    adapter_quant_scheme: str = "Default"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
