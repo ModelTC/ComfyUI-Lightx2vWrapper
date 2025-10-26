@@ -313,7 +313,6 @@ class ConfigBuilder:
             "t5_quantized": getattr(config, "t5_quantized", False),
             "clip_quantized": getattr(config, "clip_quantized", False),
             "lora_configs": getattr(config, "lora_configs", None),
-            "mm_config": getattr(config, "mm_config", None),
             "cross_attn_1_type": getattr(config, "cross_attn_1_type", None),
             "cross_attn_2_type": getattr(config, "cross_attn_2_type", None),
             "self_attn_1_type": getattr(config, "self_attn_1_type", None),

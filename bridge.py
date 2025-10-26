@@ -129,7 +129,6 @@ class LightX2VDefaultConfig:
         "t5_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["t5"],
         "clip_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["clip"],
         "adapter_quant_scheme": DEFAULT_QUANTIZATION_SCHEMES["adapter"],
-        "mm_config": {"mm_type": "Default"},
         # Memory Optimization
         "rotary_chunk": False,
         "rotary_chunk_size": 100,

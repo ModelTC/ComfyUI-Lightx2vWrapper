@@ -1117,12 +1117,16 @@ class LightX2VConfigCombinerV2:
                         logging.warning(f"Mask file not found: {obj['mask']}")
 
             if processed_talk_objects:
-                # config.talk_objects = processed_talk_objects
-                temp_dir = self.temp_manager.create_temp_dir()
-                with open(os.path.join(temp_dir, "config.json"), "w") as f:
-                    json.dump({"talk_objects": processed_talk_objects}, f)
-                config.audio_path = temp_dir
-                logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+                if len(processed_talk_objects) == 1:
+                    if "mask" not in processed_talk_objects[0]:
+                        config.audio_path = processed_talk_objects[0]["audio"]
+                        logging.info(f"Convert Processed 1 talk object to audio path: {config.audio_path}")
+                else:
+                    temp_dir = self.temp_manager.create_temp_dir()
+                    with open(os.path.join(temp_dir, "config.json"), "w") as f:
+                        json.dump({"talk_objects": processed_talk_objects}, f)
+                    config.audio_path = temp_dir
+                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
 
         logging.info("lightx2v prepared config: " + json.dumps(config, indent=2, ensure_ascii=False))
 
