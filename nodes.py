@@ -1118,7 +1118,8 @@ class LightX2VConfigCombinerV2:
 
             if processed_talk_objects:
                 if len(processed_talk_objects) == 1:
-                    if "mask" not in processed_talk_objects[0]:
+                    mask = processed_talk_objects[0].get("mask", "")
+                    if not mask or not mask.strip():
                         config.audio_path = processed_talk_objects[0]["audio"]
                         logging.info(f"Convert Processed 1 talk object to audio path: {config.audio_path}")
                 else:
