@@ -72,6 +72,7 @@ def get_available_quant_ops():
 def get_available_attn_ops():
     attn_mapping = {
         "sage_attn2": "sageattention",
+        "sage_attn3": "sageattn3",
         "flash_attn3": "flash_attn_interface",
         "flash_attn2": "flash_attn",
         "torch_sdpa": "torch",
