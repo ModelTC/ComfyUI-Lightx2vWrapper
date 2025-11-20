@@ -53,7 +53,7 @@ class InferenceConfig:
     use_31_block: bool = True
 
     # Optional parameters
-    denoising_step_list: Optional[List[int]] = None
+    denoising_step_list: Optional[List[float]] = None
     resize_mode: str = "adaptive"
     fixed_area: str = "720p"
     segment_length: int = 81

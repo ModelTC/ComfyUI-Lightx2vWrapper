@@ -140,7 +140,7 @@ class InferenceConfigBuilder:
             steps_str = optional_params["denoising_steps"]
             if steps_str and steps_str.strip():
                 try:
-                    steps_list = [int(s.strip()) for s in steps_str.split(",")]
+                    steps_list = [float(s.strip()) for s in steps_str.split(",")]
                     config.denoising_step_list = steps_list
                     config.infer_steps = len(steps_list)
                 except ValueError:
