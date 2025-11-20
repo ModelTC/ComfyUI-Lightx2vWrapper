@@ -771,8 +771,8 @@ class LightX2VModularInference:
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO")
-    RETURN_NAMES = ("images", "audio")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "PREV_FRAMES")
+    RETURN_NAMES = ("images", "audio", "prev_frames")
     FUNCTION = "generate"
     CATEGORY = "LightX2V/Inference"
 
@@ -918,6 +918,7 @@ class LightX2VModularInference:
             result_dict = current_runner.run_pipeline(input_info)
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
+            for_next_section = result_dict.get("for_next_section", None)
 
             if images is not None and images.numel() > 0:
                 images = images.cpu()
@@ -933,7 +934,7 @@ class LightX2VModularInference:
             torch.cuda.empty_cache()
             gc.collect()
 
-            return (images, audio)
+            return (images, audio, for_next_section)
 
         except Exception as e:
             logging.error(f"Error during inference: {e}")
@@ -992,6 +993,7 @@ class LightX2VConfigCombinerV2:
                     "AUDIO",
                     {"tooltip": "Input audio for audio-driven generation for s2v task"},
                 ),
+                "prev_frames": ("PREV_FRAMES", {"tooltip": "Previous frames for s2v task"}),
             },
         }
 
@@ -1012,6 +1014,7 @@ class LightX2VConfigCombinerV2:
         talk_objects_config=None,
         image=None,
         audio=None,
+        prev_frames=None,
     ):
         """Combine configurations and prepare data for inference."""
 
@@ -1057,6 +1060,13 @@ class LightX2VConfigCombinerV2:
             self.audio_handler.save(audio, temp_path)
             config.audio_path = temp_path
             logging.info(f"Audio saved to {temp_path}")
+
+        # Handle previous frames input
+        if prev_frames is not None:
+            temp_path = self.temp_manager.create_temp_file(suffix=".pt")
+            torch.save(prev_frames, temp_path)
+            config.prev_section_info_path = temp_path
+            logging.info(f"Previous frames saved to {temp_path}")
 
         # Handle talk objects
         if hasattr(config, "talk_objects") and config.talk_objects:
@@ -1720,8 +1730,8 @@ class LightX2VModularInferenceV2:
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO")
-    RETURN_NAMES = ("images", "audio")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "PREV_FRAMES")
+    RETURN_NAMES = ("images", "audio", "prev_frames")
     FUNCTION = "generate"
     CATEGORY = "LightX2V/InferenceV2"
 
@@ -1765,6 +1775,7 @@ class LightX2VModularInferenceV2:
             config["return_result_tensor"] = True
             config["save_result_path"] = ""
             config["negative_prompt"] = config.get("negative_prompt", "")
+            config["prev_section_info_path"] = config.get("prev_section_info_path", "")
             input_info = set_input_info(config)
             current_runner.set_config(config)
 
@@ -1772,6 +1783,7 @@ class LightX2VModularInferenceV2:
 
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
+            prev_frames = result_dict.get("for_next_section", None)
 
             if images is not None and images.numel() > 0:
                 images = images.cpu()
@@ -1787,7 +1799,7 @@ class LightX2VModularInferenceV2:
             torch.cuda.empty_cache()
             gc.collect()
 
-            return (images, audio)
+            return (images, audio, prev_frames)
 
         except Exception as e:
             logging.error(f"Error during inference: {e}")
