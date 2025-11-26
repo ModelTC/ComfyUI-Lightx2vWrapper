@@ -994,6 +994,7 @@ class LightX2VConfigCombinerV2:
                     {"tooltip": "Input audio for audio-driven generation for s2v task"},
                 ),
                 "prev_frames": ("PREV_FRAMES", {"tooltip": "Previous frames for s2v task"}),
+                "frist_image": ("IMAGE", {"tooltip": "First image for s2v task"}),
             },
         }
 
@@ -1015,6 +1016,7 @@ class LightX2VConfigCombinerV2:
         image=None,
         audio=None,
         prev_frames=None,
+        frist_image=None,
     ):
         """Combine configurations and prepare data for inference."""
 
@@ -1060,6 +1062,15 @@ class LightX2VConfigCombinerV2:
             self.audio_handler.save(audio, temp_path)
             config.audio_path = temp_path
             logging.info(f"Audio saved to {temp_path}")
+
+        # Handle first image input
+        if frist_image is not None:
+            frist_image_np = (frist_image[0].cpu().numpy() * 255).astype(np.uint8)
+            pil_image = Image.fromarray(frist_image_np)
+            temp_path = self.temp_manager.create_temp_file(suffix=".png")
+            pil_image.save(temp_path)
+            config.frist_image_path = temp_path
+            logging.info(f"First image saved to {temp_path}")
 
         # Handle previous frames input
         if prev_frames is not None:
