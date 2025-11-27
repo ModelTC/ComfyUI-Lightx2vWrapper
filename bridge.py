@@ -161,6 +161,7 @@ class LightX2VDefaultConfig:
         "return_video": True,
         "talk_objects": None,
         "boundary_step_index": 2,
+        "rope_type": "torch",
     }
 
 
