@@ -6,6 +6,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["ENABLE_GRAPH_MODE"] = "false"
 os.environ["ENABLE_PROFILING_DEBUG"] = "true"
 # os.environ["SENSITIVE_LAYER_DTYPE"] = "FP32"
+os.environ["PROFILING_DEBUG_LEVEL"] = "2"
 os.environ["DTYPE"] = "BF16"
 
 current_path = Path(__file__).parent.absolute()
