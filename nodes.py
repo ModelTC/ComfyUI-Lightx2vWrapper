@@ -945,8 +945,8 @@ class LightX2VModularInference:
             pass
 
 
-class LightX2VConfigCombinerV2:
-    """Config combiner that also handles data preparation (image/audio/prompts)."""
+class LightX2VConfigCombinerBase:
+    """Base class for config combiners with common functionality."""
 
     def __init__(self):
         self.config_builder = ConfigBuilder()
@@ -955,6 +955,129 @@ class LightX2VConfigCombinerV2:
         self.audio_handler = AudioFileHandler()
         self.resolver = ComfyUIFileResolver()
         self.http_downloader = HTTPFileDownloader()
+
+    def _build_base_config(
+        self,
+        inference_config,
+        prompt,
+        negative_prompt,
+        teacache_config=None,
+        quantization_config=None,
+        memory_config=None,
+        lora_chain=None,
+        talk_objects_config=None,
+    ):
+        """Build base config from input configurations."""
+        inf_config = InferenceConfig(**inference_config) if isinstance(inference_config, dict) else inference_config
+        tea_config = TeaCacheConfig(**teacache_config) if teacache_config and isinstance(teacache_config, dict) else teacache_config
+        quant_config = (
+            QuantizationConfig(**quantization_config) if quantization_config and isinstance(quantization_config, dict) else quantization_config
+        )
+        mem_config = MemoryOptimizationConfig(**memory_config) if memory_config and isinstance(memory_config, dict) else memory_config
+
+        config = self.config_builder.combine_configs(
+            inference_config=inf_config,
+            teacache_config=tea_config,
+            quantization_config=quant_config,
+            memory_config=mem_config,
+            lora_chain=lora_chain,
+            talk_objects_config=talk_objects_config,
+        )
+
+        config.prompt = prompt
+        config.negative_prompt = negative_prompt
+        return config
+
+    def _handle_image_input(self, config, image):
+        """Handle image input for i2v or s2v task."""
+        if config.task in ["i2v", "s2v"] and image is None:
+            raise ValueError("i2v or s2v task requires input image")
+
+        if config.task in ["i2v", "s2v"] and image is not None:
+            image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
+            pil_image = Image.fromarray(image_np)
+            temp_path = self.temp_manager.create_temp_file(suffix=".png")
+            pil_image.save(temp_path)
+            config.image_path = temp_path
+            logging.info(f"Image saved to {temp_path}")
+
+    def _handle_audio_input(self, config, audio):
+        """Handle audio input for seko models."""
+        if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
+            temp_path = self.temp_manager.create_temp_file(suffix=".wav")
+            self.audio_handler.save(audio, temp_path)
+            config.audio_path = temp_path
+            logging.info(f"Audio saved to {temp_path}")
+
+    def _resolve_path(self, path, prefix):
+        """Resolve a path: download if URL, resolve if relative."""
+        if self.http_downloader.is_url(path):
+            try:
+                downloaded_path = self.http_downloader.download_if_url(path, prefix=prefix)
+                logging.info(f"Downloaded {prefix} from URL: {path} -> {downloaded_path}")
+                return downloaded_path, True
+            except Exception as e:
+                logging.error(f"Failed to download {prefix} from {path}: {e}")
+                return path, False
+        elif not os.path.isabs(path) and not path.startswith("/tmp"):
+            resolved = self.resolver.resolve_input_path(path)
+            logging.info(f"Resolved {prefix} path: {path} -> {resolved}")
+            return resolved, True
+        return path, True
+
+    def _extract_talk_objects(self, config):
+        """Extract talk objects from config."""
+        if not hasattr(config, "talk_objects") or not config.talk_objects:
+            return []
+
+        result = []
+        for talk_obj in config.talk_objects:
+            obj = {}
+            if "audio" in talk_obj:
+                obj["audio"] = talk_obj["audio"]
+            if "mask" in talk_obj:
+                obj["mask"] = talk_obj["mask"]
+            if "audio" in obj:
+                result.append(obj)
+        return result
+
+    def _resolve_talk_object_paths(self, talk_objects):
+        """Resolve paths in talk objects (audio and mask)."""
+        for obj in talk_objects:
+            if "audio" in obj and obj["audio"]:
+                resolved_path, success = self._resolve_path(obj["audio"], "audio")
+                if not success:
+                    continue
+                obj["audio"] = resolved_path
+                if not os.path.exists(obj["audio"]):
+                    logging.warning(f"Audio file not found: {obj['audio']}")
+
+            if "mask" in obj and obj["mask"]:
+                resolved_path, _ = self._resolve_path(obj["mask"], "mask")
+                obj["mask"] = resolved_path
+                if not os.path.exists(obj["mask"]):
+                    logging.warning(f"Mask file not found: {obj['mask']}")
+
+        return talk_objects
+
+    def _save_talk_objects_config(self, config, processed_talk_objects):
+        """Save processed talk objects to config."""
+        if not processed_talk_objects:
+            return
+
+        if len(processed_talk_objects) == 1 and not processed_talk_objects[0].get("mask", "").strip():
+            config.audio_path = processed_talk_objects[0]["audio"]
+            logging.info(f"Convert Processed 1 talk object to audio path: {config.audio_path}")
+        else:
+            temp_dir = self.temp_manager.create_temp_dir()
+            with open(os.path.join(temp_dir, "config.json"), "w") as f:
+                json.dump({"talk_objects": processed_talk_objects}, f)
+            config.audio_path = temp_dir
+            logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+
+
+class LightX2VConfigCombinerV2(LightX2VConfigCombinerBase):
+    """Config combiner that also handles data preparation (image/audio/prompts)."""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -1019,51 +1142,21 @@ class LightX2VConfigCombinerV2:
         frist_image=None,
     ):
         """Combine configurations and prepare data for inference."""
-
-        # Convert dict configs back to objects if needed
-        inf_config = InferenceConfig(**inference_config) if isinstance(inference_config, dict) else inference_config
-        tea_config = TeaCacheConfig(**teacache_config) if teacache_config and isinstance(teacache_config, dict) else teacache_config
-        quant_config = (
-            QuantizationConfig(**quantization_config) if quantization_config and isinstance(quantization_config, dict) else quantization_config
-        )
-        mem_config = MemoryOptimizationConfig(**memory_config) if memory_config and isinstance(memory_config, dict) else memory_config
-
-        # Build combined config
-        config = self.config_builder.combine_configs(
-            inference_config=inf_config,
-            teacache_config=tea_config,
-            quantization_config=quant_config,
-            memory_config=mem_config,
-            lora_chain=lora_chain,
-            talk_objects_config=talk_objects_config,
+        config = self._build_base_config(
+            inference_config,
+            prompt,
+            negative_prompt,
+            teacache_config,
+            quantization_config,
+            memory_config,
+            lora_chain,
+            talk_objects_config,
         )
 
-        # Add prompts to config
-        config.prompt = prompt
-        config.negative_prompt = negative_prompt
+        self._handle_image_input(config, image)
+        self._handle_audio_input(config, audio)
 
-        # Validate task requirements
-        if config.task in ["i2v", "s2v"] and image is None:
-            raise ValueError("i2v or s2v task requires input image")
-
-        # Handle image input
-        if config.task in ["i2v", "s2v"] and image is not None:
-            image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
-            pil_image = Image.fromarray(image_np)
-
-            temp_path = self.temp_manager.create_temp_file(suffix=".png")
-            pil_image.save(temp_path)
-            config.image_path = temp_path
-            logging.info(f"Image saved to {temp_path}")
-
-        # Handle audio input for seko models
-        if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
-            temp_path = self.temp_manager.create_temp_file(suffix=".wav")
-            self.audio_handler.save(audio, temp_path)
-            config.audio_path = temp_path
-            logging.info(f"Audio saved to {temp_path}")
-
-        # Handle first image input
+        # Handle first image input (V2 specific)
         if frist_image is not None:
             frist_image_np = (frist_image[0].cpu().numpy() * 255).astype(np.uint8)
             pil_image = Image.fromarray(frist_image_np)
@@ -1072,100 +1165,26 @@ class LightX2VConfigCombinerV2:
             config.frist_image_path = temp_path
             logging.info(f"First image saved to {temp_path}")
 
-        # Handle previous frames input
+        # Handle previous frames input (V2 specific)
         if prev_frames is not None:
             temp_path = self.temp_manager.create_temp_file(suffix=".pt")
-            torch.save(prev_frames, temp_path)
+            prev_section_info = {"prev_video": prev_frames, "prev_latent": None}
+            torch.save(prev_section_info, temp_path)
             config.prev_section_info_path = temp_path
-            logging.info(f"Previous frames saved to {temp_path}")
+            logging.info(f"Previous frames saved to {temp_path}, shape: {prev_frames.shape}")
 
         # Handle talk objects
-        if hasattr(config, "talk_objects") and config.talk_objects:
-            talk_objects = config.talk_objects
-            processed_talk_objects = []
-
-            for talk_obj in talk_objects:
-                processed_obj = {}
-
-                if "audio" in talk_obj:
-                    processed_obj["audio"] = talk_obj["audio"]
-
-                if "mask" in talk_obj:
-                    processed_obj["mask"] = talk_obj["mask"]
-
-                if "audio" in processed_obj:
-                    processed_talk_objects.append(processed_obj)
-
-            # Resolve paths and download URLs
-            for obj in processed_talk_objects:
-                if "audio" in obj and obj["audio"]:
-                    audio_path = obj["audio"]
-
-                    # Check if it's a URL and download if needed
-                    if self.http_downloader.is_url(audio_path):
-                        try:
-                            downloaded_path = self.http_downloader.download_if_url(audio_path, prefix="audio")
-                            obj["audio"] = downloaded_path
-                            logging.info(f"Downloaded audio from URL: {audio_path} -> {downloaded_path}")
-                        except Exception as e:
-                            logging.error(f"Failed to download audio from {audio_path}: {e}")
-                            continue
-                    # Handle relative paths
-                    elif not os.path.isabs(audio_path) and not audio_path.startswith("/tmp"):
-                        obj["audio"] = self.resolver.resolve_input_path(audio_path)
-                        logging.info(f"Resolved audio path: {audio_path} -> {obj['audio']}")
-
-                    # Check if file exists
-                    if not os.path.exists(obj["audio"]):
-                        logging.warning(f"Audio file not found: {obj['audio']}")
-
-                if "mask" in obj and obj["mask"]:
-                    mask_path = obj["mask"]
-
-                    # Check if it's a URL and download if needed
-                    if self.http_downloader.is_url(mask_path):
-                        try:
-                            downloaded_path = self.http_downloader.download_if_url(mask_path, prefix="mask")
-                            obj["mask"] = downloaded_path
-                            logging.info(f"Downloaded mask from URL: {mask_path} -> {downloaded_path}")
-                        except Exception as e:
-                            logging.error(f"Failed to download mask from {mask_path}: {e}")
-                            # Don't skip the object if mask download fails (mask is optional)
-                    # Handle relative paths
-                    elif not os.path.isabs(mask_path) and not mask_path.startswith("/tmp"):
-                        obj["mask"] = self.resolver.resolve_input_path(mask_path)
-                        logging.info(f"Resolved mask path: {mask_path} -> {obj['mask']}")
-
-                    # Check if file exists
-                    if not os.path.exists(obj["mask"]):
-                        logging.warning(f"Mask file not found: {obj['mask']}")
-
-            if processed_talk_objects:
-                if len(processed_talk_objects) == 1 and not processed_talk_objects[0].get("mask", "").strip():
-                    config.audio_path = processed_talk_objects[0]["audio"]
-                    logging.info(f"Convert Processed 1 talk object to audio path: {config.audio_path}")
-                else:
-                    temp_dir = self.temp_manager.create_temp_dir()
-                    with open(os.path.join(temp_dir, "config.json"), "w") as f:
-                        json.dump({"talk_objects": processed_talk_objects}, f)
-                    config.audio_path = temp_dir
-                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+        talk_objects = self._extract_talk_objects(config)
+        if talk_objects:
+            processed = self._resolve_talk_object_paths(talk_objects)
+            self._save_talk_objects_config(config, processed)
 
         logging.info("lightx2v prepared config: " + json.dumps(config, indent=2, ensure_ascii=False))
-
         return (config,)
 
 
-class LightX2VConfigCombinerV3:
-    """Config combiner that also handles data preparation (image/audio/prompts)."""
-
-    def __init__(self):
-        self.config_builder = ConfigBuilder()
-        self.temp_manager = TempFileManager()
-        self.image_handler = ImageFileHandler()
-        self.audio_handler = AudioFileHandler()
-        self.resolver = ComfyUIFileResolver()
-        self.http_downloader = HTTPFileDownloader()
+class LightX2VConfigCombinerV3(LightX2VConfigCombinerBase):
+    """Config combiner with advanced talk objects processing (audio extension, background generation)."""
 
     @staticmethod
     def extend_mp3(input_path: str, output_path: str, duration: float) -> bool:
@@ -1527,6 +1546,82 @@ class LightX2VConfigCombinerV3:
     FUNCTION = "prepare_config"
     CATEGORY = "LightX2V/ConfigV2"
 
+    def _resolve_talk_objects_with_duration(self, talk_objects):
+        """Resolve paths and get audio duration for each talk object."""
+        max_duration = None
+        for obj in talk_objects:
+            if "audio" in obj and obj["audio"]:
+                resolved_path, success = self._resolve_path(obj["audio"], "audio")
+                if not success:
+                    continue
+                obj["audio"] = resolved_path
+                if not os.path.exists(obj["audio"]):
+                    logging.warning(f"Audio file not found: {obj['audio']}")
+                duration = self.get_audio_duration(obj["audio"])
+                obj["duration"] = duration
+                if max_duration is None or duration > max_duration:
+                    max_duration = duration
+
+            if "mask" in obj and obj["mask"]:
+                resolved_path, _ = self._resolve_path(obj["mask"], "mask")
+                obj["mask"] = resolved_path
+                if not os.path.exists(obj["mask"]):
+                    logging.warning(f"Mask file not found: {obj['mask']}")
+
+        return talk_objects, max_duration
+
+    def _process_multi_speaker_talk_objects(self, src_talk_objects, max_duration):
+        """Process multiple talk objects: extend audio and generate background."""
+        processed_talk_objects = []
+        mask_img_paths = []
+        extend_count = 0
+
+        for obj in src_talk_objects:
+            dst_obj = {}
+            src_audio_path = obj["audio"]
+            src_audio_duration = obj["duration"]
+
+            if max_duration - src_audio_duration > 0.1:
+                dst_audio_path = self.temp_manager.create_temp_file(suffix=".mp3")
+                self.extend_mp3(src_audio_path, dst_audio_path, max_duration)
+                extend_count += 1
+                dst_obj["audio"] = dst_audio_path
+            else:
+                dst_obj["audio"] = src_audio_path
+
+            src_mask = obj.get("mask", None)
+            if src_mask:
+                dst_obj["mask"] = src_mask
+                mask_img_paths.append(src_mask)
+            processed_talk_objects.append(dst_obj)
+
+        logging.info(f"Extended {extend_count} audio files")
+
+        # Generate background mask and audio
+        bg_mask_io = self.generate_background_mask(mask_img_paths)
+        bg_mask_path = self.temp_manager.create_temp_file(suffix=".jpg")
+        with open(bg_mask_path, "wb") as f:
+            f.write(bg_mask_io.getvalue())
+
+        bg_noise_data = self.generate_white_noise(
+            duration=max_duration,
+            framerate=16000,
+            n_channels=1,
+            rms=0.00232,
+            std_dev=0.00232,
+        )
+        wav_io = io.BytesIO()
+        self.save_wav_file(audio_data=bg_noise_data, output_path=wav_io, framerate=16000, sample_width=2)
+        bg_audio_path = self.temp_manager.create_temp_file(suffix=".wav")
+        with open(bg_audio_path, "wb") as f:
+            f.write(wav_io.getvalue())
+
+        bg_obj = {"audio": bg_audio_path, "mask": bg_mask_path}
+        processed_talk_objects.append(bg_obj)
+        logging.info(f"Generated background mask and audio: {bg_mask_path}, {bg_audio_path}")
+
+        return processed_talk_objects
+
     def prepare_config(
         self,
         inference_config,
@@ -1541,178 +1636,33 @@ class LightX2VConfigCombinerV3:
         audio=None,
     ):
         """Combine configurations and prepare data for inference."""
-
-        # Convert dict configs back to objects if needed
-        inf_config = InferenceConfig(**inference_config) if isinstance(inference_config, dict) else inference_config
-        tea_config = TeaCacheConfig(**teacache_config) if teacache_config and isinstance(teacache_config, dict) else teacache_config
-        quant_config = (
-            QuantizationConfig(**quantization_config) if quantization_config and isinstance(quantization_config, dict) else quantization_config
-        )
-        mem_config = MemoryOptimizationConfig(**memory_config) if memory_config and isinstance(memory_config, dict) else memory_config
-
-        # Build combined config
-        config = self.config_builder.combine_configs(
-            inference_config=inf_config,
-            teacache_config=tea_config,
-            quantization_config=quant_config,
-            memory_config=mem_config,
-            lora_chain=lora_chain,
-            talk_objects_config=talk_objects_config,
+        config = self._build_base_config(
+            inference_config,
+            prompt,
+            negative_prompt,
+            teacache_config,
+            quantization_config,
+            memory_config,
+            lora_chain,
+            talk_objects_config,
         )
 
-        # Add prompts to config
-        config.prompt = prompt
-        config.negative_prompt = negative_prompt
+        self._handle_image_input(config, image)
+        self._handle_audio_input(config, audio)
 
-        # Validate task requirements
-        if config.task in ["i2v", "s2v"] and image is None:
-            raise ValueError("i2v or s2v task requires input image")
-
-        # Handle image input
-        if config.task in ["i2v", "s2v"] and image is not None:
-            image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
-            pil_image = Image.fromarray(image_np)
-
-            temp_path = self.temp_manager.create_temp_file(suffix=".png")
-            pil_image.save(temp_path)
-            config.image_path = temp_path
-            logging.info(f"Image saved to {temp_path}")
-
-        # Handle audio input for seko models
-        if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
-            temp_path = self.temp_manager.create_temp_file(suffix=".wav")
-            self.audio_handler.save(audio, temp_path)
-            config.audio_path = temp_path
-            logging.info(f"Audio saved to {temp_path}")
-
-        # Handle talk objects
-        if hasattr(config, "talk_objects") and config.talk_objects:
-            talk_objects = config.talk_objects
-            src_talk_objects = []
-
-            for talk_obj in talk_objects:
-                src_obj = {}
-
-                if "audio" in talk_obj:
-                    src_obj["audio"] = talk_obj["audio"]
-
-                if "mask" in talk_obj:
-                    src_obj["mask"] = talk_obj["mask"]
-
-                if "audio" in src_obj:
-                    src_talk_objects.append(src_obj)
-
-            # Resolve paths and download URLs,
-            # record the max duration of the src talk objects
-            max_src_duration = None
-            for obj in src_talk_objects:
-                if "audio" in obj and obj["audio"]:
-                    audio_path = obj["audio"]
-
-                    # Check if it's a URL and download if needed
-                    if self.http_downloader.is_url(audio_path):
-                        try:
-                            downloaded_path = self.http_downloader.download_if_url(audio_path, prefix="audio")
-                            obj["audio"] = downloaded_path
-                            logging.info(f"Downloaded audio from URL: {audio_path} -> {downloaded_path}")
-                        except Exception as e:
-                            logging.error(f"Failed to download audio from {audio_path}: {e}")
-                            continue
-                    # Handle relative paths
-                    elif not os.path.isabs(audio_path) and not audio_path.startswith("/tmp"):
-                        obj["audio"] = self.resolver.resolve_input_path(audio_path)
-                        logging.info(f"Resolved audio path: {audio_path} -> {obj['audio']}")
-
-                    # Check if file exists
-                    if not os.path.exists(obj["audio"]):
-                        logging.warning(f"Audio file not found: {obj['audio']}")
-                    duration = self.get_audio_duration(obj["audio"])
-                    obj["duration"] = duration
-                    if max_src_duration is None or duration > max_src_duration:
-                        max_src_duration = duration
-
-                if "mask" in obj and obj["mask"]:
-                    mask_path = obj["mask"]
-
-                    # Check if it's a URL and download if needed
-                    if self.http_downloader.is_url(mask_path):
-                        try:
-                            downloaded_path = self.http_downloader.download_if_url(mask_path, prefix="mask")
-                            obj["mask"] = downloaded_path
-                            logging.info(f"Downloaded mask from URL: {mask_path} -> {downloaded_path}")
-                        except Exception as e:
-                            logging.error(f"Failed to download mask from {mask_path}: {e}")
-                            # Don't skip the object if mask download fails (mask is optional)
-                    # Handle relative paths
-                    elif not os.path.isabs(mask_path) and not mask_path.startswith("/tmp"):
-                        obj["mask"] = self.resolver.resolve_input_path(mask_path)
-                        logging.info(f"Resolved mask path: {mask_path} -> {obj['mask']}")
-
-                    # Check if file exists
-                    if not os.path.exists(obj["mask"]):
-                        logging.warning(f"Mask file not found: {obj['mask']}")
+        # Handle talk objects with advanced processing (V3 specific)
+        src_talk_objects = self._extract_talk_objects(config)
+        if src_talk_objects:
+            src_talk_objects, max_duration = self._resolve_talk_objects_with_duration(src_talk_objects)
 
             if len(src_talk_objects) > 1:
-                # extend audio duration to the max duration of the src talk objects
-                processed_talk_objects: list[dict[str, str]] = list()
-                mask_img_paths = list()
-                extend_count = 0
-                for obj in src_talk_objects:
-                    dst_obj = dict()
-                    src_audio_path = obj["audio"]
-                    src_audio_duration = obj["duration"]
-                    if max_src_duration - src_audio_duration > 0.1:
-                        dst_audio_path = self.temp_manager.create_temp_file(suffix=".mp3")
-                        self.extend_mp3(src_audio_path, dst_audio_path, max_src_duration)
-                        extend_count += 1
-                        dst_obj["audio"] = dst_audio_path
-                    else:
-                        dst_obj["audio"] = src_audio_path
-                    src_mask = obj.get("mask", None)
-                    if src_mask:
-                        dst_obj["mask"] = src_mask
-                        mask_img_paths.append(src_mask)
-                    processed_talk_objects.append(dst_obj)
-                logging.info(f"Extended {extend_count} audio files")
-                # generate background mask and audio
-                bg_mask_io = self.generate_background_mask(mask_img_paths)
-                bg_mask_path = self.temp_manager.create_temp_file(suffix=".jpg")
-                with open(bg_mask_path, "wb") as f:
-                    f.write(bg_mask_io.getvalue())
-                bg_noise_data = self.generate_white_noise(
-                    duration=max_src_duration,
-                    framerate=16000,
-                    n_channels=1,
-                    rms=0.00232,
-                    std_dev=0.00232,
-                )
-                wav_io = io.BytesIO()
-                self.save_wav_file(audio_data=bg_noise_data, output_path=wav_io, framerate=16000, sample_width=2)
-                bg_audio_path = self.temp_manager.create_temp_file(suffix=".wav")
-                with open(bg_audio_path, "wb") as f:
-                    f.write(wav_io.getvalue())
-                bg_obj = dict(
-                    audio=bg_audio_path,
-                    mask=bg_mask_path,
-                )
-                processed_talk_objects.append(bg_obj)
-                logging.info(f"Generated background mask and audio: {bg_mask_path}, {bg_audio_path}")
+                processed = self._process_multi_speaker_talk_objects(src_talk_objects, max_duration)
             else:
-                processed_talk_objects = src_talk_objects
+                processed = src_talk_objects
 
-            if processed_talk_objects:
-                if len(processed_talk_objects) == 1 and not processed_talk_objects[0].get("mask", "").strip():
-                    config.audio_path = processed_talk_objects[0]["audio"]
-                    logging.info(f"Convert Processed 1 talk object to audio path: {config.audio_path}")
-                else:
-                    temp_dir = self.temp_manager.create_temp_dir()
-                    with open(os.path.join(temp_dir, "config.json"), "w") as f:
-                        json.dump({"talk_objects": processed_talk_objects}, f)
-                    config.audio_path = temp_dir
-                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
+            self._save_talk_objects_config(config, processed)
 
         logging.info("lightx2v prepared config: " + json.dumps(config, indent=2, ensure_ascii=False))
-
         return (config,)
 
 
@@ -1821,6 +1771,101 @@ class LightX2VModularInferenceV2:
             pass
 
 
+class ExtractLastNFrames:
+    """Extract the last n frames from I2V output video and convert to prev_frames format"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "video": ("IMAGE", {"tooltip": "Video frames from I2V output"}),
+                "num_frames": ("INT", {"default": 5, "min": 1, "max": 100, "tooltip": "Number of last frames to extract"}),
+            },
+        }
+
+    RETURN_TYPES = ("PREV_FRAMES", "IMAGE")
+    RETURN_NAMES = ("prev_frames", "preview_images")
+    FUNCTION = "extract_frames"
+    CATEGORY = "LightX2V/Utils"
+
+    def extract_frames(self, video, num_frames):
+        """
+        Extract the last n frames from video and convert to prev_frames format
+
+        Args:
+            video: Video tensor from I2V output, can be one of the following formats:
+                  - (batch, height, width, channels) - ComfyUI standard IMAGE format (single frame)
+                  - (frames, height, width, channels) - Video frame sequence format
+                  - (batch, channels, frames, height, width) - Video tensor format
+            num_frames: Number of frames to extract
+
+        Returns:
+            prev_frames: Tensor with shape (1, 3, num_frames, height, width) for prev_frames input
+            preview_images: IMAGE tensor with shape (frames, height, width, 3) for visual preview
+        """
+        if video is None or video.numel() == 0:
+            raise ValueError("Input video cannot be empty")
+
+        dims = len(video.shape)
+
+        if dims == 4:
+            if video.shape[-1] in [3, 4]:
+                frames = video.shape[0]
+                channels = video.shape[-1]
+
+                video = video.permute(0, 3, 1, 2)  # (frames, channels, H, W)
+                video = video.permute(1, 0, 2, 3).unsqueeze(0)  # (1, channels, frames, H, W)
+
+                num_frames = min(num_frames, frames)
+                prev_frames = video[:, :, -num_frames:, :, :]
+
+                if channels != 3:
+                    if channels == 1:
+                        prev_frames = prev_frames.repeat(1, 3, 1, 1, 1)
+                    elif channels == 4:
+                        prev_frames = prev_frames[:, :3, :, :, :]
+                    else:
+                        prev_frames = prev_frames[:, :3, :, :, :]
+            else:
+                raise ValueError(f"Unsupported 4D tensor format: {video.shape}, expected last dimension to be 3 or 4 (RGB/RGBA)")
+        elif dims == 5:
+            batch, channels, frames, _height, _width = video.shape
+            num_frames = min(num_frames, frames)
+            prev_frames = video[:, :, -num_frames:, :, :]  # (batch, channels, num_frames, H, W)
+
+            if batch > 1:
+                prev_frames = prev_frames[0:1, :, :, :, :]
+
+            if channels != 3:
+                if channels == 1:
+                    prev_frames = prev_frames.repeat(1, 3, 1, 1, 1)
+                else:
+                    prev_frames = prev_frames[:, :3, :, :, :]
+        else:
+            raise ValueError(f"Unsupported tensor dimension: {dims}, shape: {video.shape}")
+
+        if prev_frames.dtype != torch.float32:
+            prev_frames = prev_frames.float()
+
+        if prev_frames.max() > 1.0:
+            prev_frames = prev_frames / 255.0
+
+        # Convert to [-1, 1] range (VAE decoded format)
+        prev_frames_for_save = prev_frames * 2.0 - 1.0  # [0, 1] -> [-1, 1]
+        prev_frames_for_save = torch.clamp(prev_frames_for_save, -1.0, 1.0)
+
+        # Convert to IMAGE format for visualization: (1, 3, frames, H, W) -> (frames, H, W, 3)
+        preview_images = prev_frames.squeeze(0)  # (3, frames, H, W)
+        preview_images = preview_images.permute(1, 2, 3, 0)  # (frames, H, W, 3)
+
+        logging.info(
+            f"Extracted last {num_frames} frames, prev_frames shape: {prev_frames_for_save.shape}, preview_images shape: {preview_images.shape}"
+        )
+        logging.info(f"prev_frames value range: [{prev_frames_for_save.min():.3f}, {prev_frames_for_save.max():.3f}]")
+
+        return (prev_frames_for_save, preview_images)
+
+
 NODE_CLASS_MAPPINGS = {
     "LightX2VInferenceConfig": LightX2VInferenceConfig,
     "LightX2VTeaCache": LightX2VTeaCache,
@@ -1836,6 +1881,7 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VTalkObjectsCombiner": TalkObjectsCombiner,
     "LightX2VTalkObjectsFromJSON": TalkObjectsFromJSON,
     "LightX2VTalkObjectsFromFiles": TalkObjectsFromFiles,
+    "LightX2VExtractLastNFrames": ExtractLastNFrames,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1853,4 +1899,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VTalkObjectsCombiner": "LightX2V Talk Objects Combiner",
     "LightX2VTalkObjectsFromFiles": "LightX2V Talk Objects From Files",
     "LightX2VTalkObjectsFromJSON": "LightX2V Talk Objects From JSON (API)",
+    "LightX2VExtractLastNFrames": "LightX2V Extract Last N Frames",
 }
