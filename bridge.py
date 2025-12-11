@@ -317,6 +317,7 @@ class ModularConfigManager:
             "use_31_block": "use_31_block",
             "prev_frame_length": "prev_frame_length",
             "fixed_area": "fixed_area",
+            "f2v_process": "f2v_process",
         }
 
         self._update_from_config(updates, config, basic_mappings)

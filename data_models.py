@@ -65,6 +65,7 @@ class InferenceConfig:
     negative_prompt: str = ""
     image_path: Optional[str] = None
     audio_path: Optional[str] = None
+    f2v_process: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary, excluding None values."""

@@ -199,6 +199,13 @@ class LightX2VInferenceConfig:
                         "tooltip": "Use lightweight VAE to accelerate decoding",
                     },
                 ),
+                "f2v_process": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Use f2v process",
+                    },
+                ),
             },
         }
 
@@ -227,6 +234,7 @@ class LightX2VInferenceConfig:
         segment_length=81,
         prev_frame_length=5,
         use_tiny_vae=False,
+        f2v_process=False,
     ):
         """Create basic inference configuration."""
         builder = InferenceConfigBuilder()

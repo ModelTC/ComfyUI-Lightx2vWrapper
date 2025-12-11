@@ -166,6 +166,9 @@ class InferenceConfigBuilder:
             if "prev_frame_length" in optional_params:
                 config.prev_frame_length = optional_params["prev_frame_length"]
 
+        if "f2v_process" in optional_params:
+            config.f2v_process = optional_params["f2v_process"]
+
 
 class TalkObjectConfigBuilder:
     """Builder for talk object configurations."""
@@ -338,6 +341,7 @@ class ConfigBuilder:
             "adapter_quant_scheme": getattr(config, "adapter_quant_scheme", None),
             "adapter_quantized": getattr(config, "adapter_quantized", False),
             "feature_caching": getattr(config, "feature_caching", None),
+            "f2v_process": getattr(config, "f2v_process", False),
         }
 
         config_str = json.dumps(relevant_configs, sort_keys=True)
