@@ -258,6 +258,7 @@ class LightX2VInferenceConfig:
             segment_length=segment_length,
             prev_frame_length=prev_frame_length,
             use_tiny_vae=use_tiny_vae,
+            f2v_process=f2v_process,
         )
 
         return (config.to_dict(),)
