@@ -1187,8 +1187,8 @@ class LightX2VConfigCombinerV3:
         ]
 
         try:
-            output = sp.check_output(cmd_probe)
-            data = json.loads(output.decode("utf-8"))
+            output = sp.check_output(cmd_probe, encoding="utf-8", errors="replace")
+            data = json.loads(output)
             streams = data.get("streams", [])
             if not streams:
                 raise ValueError(f"Failed to get audio stream information: {input_path}")
@@ -1221,7 +1221,7 @@ class LightX2VConfigCombinerV3:
                     output_path,
                 ]
 
-            sp.run(cmd, capture_output=True, text=True, check=True)
+            sp.run(cmd, capture_output=True, text=True, check=True, encoding="utf-8", errors="replace")
             return True
 
         except sp.CalledProcessError as e:
@@ -1267,8 +1267,8 @@ class LightX2VConfigCombinerV3:
             input_path,
         ]
         try:
-            output = sp.check_output(cmd_probe)
-            data = json.loads(output.decode("utf-8"))
+            output = sp.check_output(cmd_probe, encoding="utf-8", errors="replace")
+            data = json.loads(output)
             streams = data.get("streams", [])
             if not streams:
                 raise ValueError(f"Failed to get audio stream information: {input_path}")
