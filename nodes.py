@@ -33,7 +33,7 @@ from .file_handlers import (
     TempFileManager,
 )
 from .lightx2v.lightx2v.infer import init_runner
-from .lightx2v.lightx2v.utils.input_info import set_input_info
+from .lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
 from .lightx2v.lightx2v.utils.set_config import set_config
 from .model_utils import scan_loras, scan_models, support_model_cls_list
 
@@ -67,10 +67,10 @@ class LightX2VInferenceConfig:
                     },
                 ),
                 "task": (
-                    ["t2v", "i2v", "s2v"],
+                    ["t2v", "i2v", "s2v", "rs2v"],
                     {
                         "default": "i2v",
-                        "tooltip": "Task type: text-to-video or image-to-video or audio-to-video",
+                        "tooltip": "Task type: text-to-video or image-to-video or reference_image and audio to video (shot)",
                     },
                 ),
                 "infer_steps": (
@@ -794,12 +794,12 @@ class LightX2VModularInference:
         config.prompt = prompt
         config.negative_prompt = negative_prompt
 
-        if config.task in ["i2v", "s2v"] and image is None:
+        if config.task in ["i2v", "s2v", "rs2v"] and image is None:
             raise ValueError(f"{config.task} task requires input image")
 
         try:
             # Handle image input
-            if config.task in ["i2v", "s2v"] and image is not None:
+            if config.task in ["i2v", "s2v", "rs2v"] and image is not None:
                 image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
                 pil_image = Image.fromarray(image_np)
 
@@ -913,7 +913,9 @@ class LightX2VModularInference:
             config["return_result_tensor"] = True
             config["save_result_path"] = ""
             config["negative_prompt"] = config.get("negative_prompt", "")
-            input_info = set_input_info(config)
+            input_info = init_empty_input_info(config.task)
+            update_input_info_from_dict(input_info, config)
+
             current_runner.set_config(config)
             result_dict = current_runner.run_pipeline(input_info)
             images = result_dict.get("video", None)
@@ -990,7 +992,7 @@ class LightX2VConfigCombinerV2:
                 "image": ("IMAGE", {"tooltip": "Input image for i2v or s2v task"}),
                 "audio": (
                     "AUDIO",
-                    {"tooltip": "Input audio for audio-driven generation for s2v task"},
+                    {"tooltip": "Input audio for audio-driven generation for s2v or rs2v task"},
                 ),
             },
         }
@@ -1038,11 +1040,11 @@ class LightX2VConfigCombinerV2:
         config.negative_prompt = negative_prompt
 
         # Validate task requirements
-        if config.task in ["i2v", "s2v"] and image is None:
-            raise ValueError("i2v or s2v task requires input image")
+        if config.task in ["i2v", "s2v", "rs2v"] and image is None:
+            raise ValueError("i2v or s2v or rs2v task requires input image")
 
         # Handle image input
-        if config.task in ["i2v", "s2v"] and image is not None:
+        if config.task in ["i2v", "s2v", "rs2v"] and image is not None:
             image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
             pil_image = Image.fromarray(image_np)
 
@@ -1493,10 +1495,10 @@ class LightX2VConfigCombinerV3:
                 ),
                 "lora_chain": ("LORA_CHAIN", {"tooltip": "LoRA chain configuration"}),
                 "talk_objects_config": ("TALK_OBJECTS_CONFIG", {"tooltip": "Talk objects configuration"}),
-                "image": ("IMAGE", {"tooltip": "Input image for i2v or s2v task"}),
+                "image": ("IMAGE", {"tooltip": "Input image for i2v or s2v or rs2v task"}),
                 "audio": (
                     "AUDIO",
-                    {"tooltip": "Input audio for audio-driven generation for s2v task"},
+                    {"tooltip": "Input audio for audio-driven generation for s2v or rs2v task"},
                 ),
             },
         }
@@ -1544,11 +1546,11 @@ class LightX2VConfigCombinerV3:
         config.negative_prompt = negative_prompt
 
         # Validate task requirements
-        if config.task in ["i2v", "s2v"] and image is None:
-            raise ValueError("i2v or s2v task requires input image")
+        if config.task in ["i2v", "s2v", "rs2v"] and image is None:
+            raise ValueError("i2v or s2v or rs2v task requires input image")
 
         # Handle image input
-        if config.task in ["i2v", "s2v"] and image is not None:
+        if config.task in ["i2v", "s2v", "rs2v"] and image is not None:
             image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
             pil_image = Image.fromarray(image_np)
 
@@ -1729,6 +1731,58 @@ class LightX2VModularInferenceV2:
         """Get hash of configuration to detect changes."""
         return self.config_builder.get_config_hash(config)
 
+    def _build_rs2v_shot_config(self, config):
+        from .lightx2v.lightx2v.shot_runner.shot_base import ClipConfig, ShotConfig, load_clip_configs
+
+        config_json = config.get("config_json")
+        if config_json:
+            if isinstance(config_json, dict):
+                lightx2v_path = config_json.get("lightx2v_path", "")
+                clip_items = config_json.get("clip_configs", [])
+                clip_configs = []
+                for item in clip_items:
+                    if "config" in item:
+                        clip_config_json = item["config"]
+                    else:
+                        clip_config_json = item.get("path", "")
+                        if clip_config_json and lightx2v_path and not os.path.isabs(clip_config_json):
+                            clip_config_json = os.path.join(lightx2v_path, clip_config_json)
+                    clip_configs.append(ClipConfig(name=item["name"], config_json=clip_config_json))
+            else:
+                clip_configs = load_clip_configs(config_json)
+        elif config.get("clip_configs"):
+            clip_configs = []
+            lightx2v_path = config.get("lightx2v_path", "")
+            for item in config["clip_configs"]:
+                if "config" in item:
+                    config_json = item["config"]
+                else:
+                    config_json = item.get("path", "")
+                    if config_json and lightx2v_path and not os.path.isabs(config_json):
+                        config_json = os.path.join(lightx2v_path, config_json)
+                clip_configs.append(ClipConfig(name=item["name"], config_json=config_json))
+        else:
+            lightx2v_path = ""
+            clip_configs = [
+                ClipConfig(
+                    name="rs2v_clip",
+                    config_json=dict(config),
+                )
+            ]
+            if "task" not in clip_configs[0].config_json:
+                clip_configs[0].config_json["task"] = "rs2v"
+
+        return ShotConfig(
+            seed=config.get("seed", 42),
+            image_path=config.get("image_path", ""),
+            audio_path=config.get("audio_path", ""),
+            prompt=config.get("prompt", ""),
+            negative_prompt=config.get("negative_prompt", ""),
+            save_result_path=config.get("save_result_path", ""),
+            clip_configs=clip_configs,
+            target_shape=config.get("target_shape", []),
+        )
+
     def generate(self, prepared_config):
         """Run inference with prepared configuration."""
         config = prepared_config
@@ -1748,8 +1802,14 @@ class LightX2VModularInferenceV2:
                     del self.__class__._current_runner
                     torch.cuda.empty_cache()
                     gc.collect()
-                formatted_config = set_config(config)
-                self.__class__._current_runner = init_runner(formatted_config)
+                if config.get("task") == "rs2v":
+                    from .lightx2v.lightx2v.shot_runner.rs2v_infer import ShotRS2VPipeline
+
+                    shot_cfg = self._build_rs2v_shot_config(config)
+                    self.__class__._current_runner = ShotRS2VPipeline(shot_cfg)
+                else:
+                    formatted_config = set_config(config)
+                    self.__class__._current_runner = init_runner(formatted_config)
                 self.__class__._current_config_hash = config_hash
 
             progress = ProgressBar(100)
@@ -1765,10 +1825,15 @@ class LightX2VModularInferenceV2:
             config["return_result_tensor"] = True
             config["save_result_path"] = ""
             config["negative_prompt"] = config.get("negative_prompt", "")
-            input_info = set_input_info(config)
-            current_runner.set_config(config)
-
-            result_dict = current_runner.run_pipeline(input_info)
+            if config.get("task") == "rs2v":
+                # rs2v 使用 shot_runner 管线
+                current_runner.set_config(config)
+                result_dict = current_runner.run_pipeline(config)
+            else:
+                input_info = init_empty_input_info(config.task)
+                update_input_info_from_dict(input_info, config)
+                current_runner.set_config(config)
+                result_dict = current_runner.run_pipeline(input_info)
 
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)

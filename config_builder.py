@@ -163,6 +163,8 @@ class InferenceConfigBuilder:
             config.use_31_block = False
             if "2.5" in config.model_path:
                 config.use_31_block = True
+            if "rs2v" in config.task:
+                config.use_31_block = True
             if "prev_frame_length" in optional_params:
                 config.prev_frame_length = optional_params["prev_frame_length"]
 

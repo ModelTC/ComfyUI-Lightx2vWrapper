@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["PROFILING_DEBUG_LEVEL"] = "2"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["ENABLE_GRAPH_MODE"] = "false"
 os.environ["ENABLE_PROFILING_DEBUG"] = "true"
