@@ -158,9 +158,10 @@ class LightX2VDefaultConfig:
         "seq_parallel": False,
         "cfg_parallel": False,
         "audio_sr": 16000,
-        "return_video": True,
+        #"return_video": True,
         "talk_objects": None,
         "boundary_step_index": 2,
+        "rope_type": "torch",
     }
 
 
@@ -309,7 +310,7 @@ class ModularConfigManager:
             "height": "target_height",
             "width": "target_width",
             "video_length": "target_video_length",
-            "fps": "fps",
+            "fps": "target_fps",
             "video_duration": "video_duration",
             "resize_mode": "resize_mode",
             "denoising_step_list": "denoising_step_list",
@@ -332,7 +333,7 @@ class ModularConfigManager:
 
         attention_type = config.get("attention_type", LightX2VDefaultConfig.DEFAULT_ATTENTION_TYPE)
         for attn_key in [
-            "attention_type",
+            #"attention_type",
             "self_attn_1_type",
             "cross_attn_1_type",
             "cross_attn_2_type",
