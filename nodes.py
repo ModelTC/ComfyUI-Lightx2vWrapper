@@ -1732,56 +1732,42 @@ class LightX2VModularInferenceV2:
         return self.config_builder.get_config_hash(config)
 
     def _build_rs2v_shot_config(self, config):
-        from .lightx2v.lightx2v.shot_runner.shot_base import ClipConfig, ShotConfig, load_clip_configs
+        from .lightx2v.lightx2v.shot_runner.shot_base import load_clip_configs
+        from .lightx2v.lightx2v.utils.lockable_dict import LockableDict
 
         config_json = config.get("config_json")
         if config_json:
-            if isinstance(config_json, dict):
-                lightx2v_path = config_json.get("lightx2v_path", "")
-                clip_items = config_json.get("clip_configs", [])
-                clip_configs = []
-                for item in clip_items:
-                    if "config" in item:
-                        clip_config_json = item["config"]
-                    else:
-                        clip_config_json = item.get("path", "")
-                        if clip_config_json and lightx2v_path and not os.path.isabs(clip_config_json):
-                            clip_config_json = os.path.join(lightx2v_path, clip_config_json)
-                    clip_configs.append(ClipConfig(name=item["name"], config_json=clip_config_json))
-            else:
-                clip_configs = load_clip_configs(config_json)
+            main_cfg = config_json
         elif config.get("clip_configs"):
-            clip_configs = []
-            lightx2v_path = config.get("lightx2v_path", "")
-            for item in config["clip_configs"]:
-                if "config" in item:
-                    config_json = item["config"]
-                else:
-                    config_json = item.get("path", "")
-                    if config_json and lightx2v_path and not os.path.isabs(config_json):
-                        config_json = os.path.join(lightx2v_path, config_json)
-                clip_configs.append(ClipConfig(name=item["name"], config_json=config_json))
+            main_cfg = config
         else:
-            lightx2v_path = ""
-            clip_configs = [
-                ClipConfig(
-                    name="rs2v_clip",
-                    config_json=dict(config),
-                )
-            ]
-            if "task" not in clip_configs[0].config_json:
-                clip_configs[0].config_json["task"] = "rs2v"
+            main_cfg = {
+                "lightx2v_path": "",
+                "clip_configs": [
+                    {
+                        "name": "rs2v_clip",
+                        "config": LockableDict(config),
+                    }
+                ],
+            }
+            if "task" not in main_cfg["clip_configs"][0]["config"]:
+                main_cfg["clip_configs"][0]["config"]["task"] = "rs2v"
 
-        return ShotConfig(
-            seed=config.get("seed", 42),
-            image_path=config.get("image_path", ""),
-            audio_path=config.get("audio_path", ""),
-            prompt=config.get("prompt", ""),
-            negative_prompt=config.get("negative_prompt", ""),
-            save_result_path=config.get("save_result_path", ""),
-            clip_configs=clip_configs,
-            target_shape=config.get("target_shape", []),
-        )
+        if isinstance(main_cfg, dict) and "lightx2v_path" not in main_cfg:
+            main_cfg = dict(main_cfg)
+            main_cfg["lightx2v_path"] = ""
+
+        return load_clip_configs(main_cfg)
+        # return dict(
+        #     seed=config.get("seed", 42),
+        #     image_path=config.get("image_path", ""),
+        #     audio_path=config.get("audio_path", ""),
+        #     prompt=config.get("prompt", ""),
+        #     negative_prompt=config.get("negative_prompt", ""),
+        #     save_result_path=config.get("save_result_path", ""),
+        #     clip_configs=clip_configs,
+        #     target_shape=config.get("target_shape", []),
+        # )
 
     def generate(self, prepared_config):
         """Run inference with prepared configuration."""
@@ -1827,7 +1813,7 @@ class LightX2VModularInferenceV2:
             config["negative_prompt"] = config.get("negative_prompt", "")
             if config.get("task") == "rs2v":
                 # rs2v 使用 shot_runner 管线
-                current_runner.set_config(config)
+                # current_runner.set_config(config)
                 result_dict = current_runner.run_pipeline(config)
             else:
                 input_info = init_empty_input_info(config.task)
