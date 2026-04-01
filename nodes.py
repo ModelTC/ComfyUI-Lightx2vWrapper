@@ -728,224 +728,6 @@ class LightX2VConfigCombiner:
         return (config,)
 
 
-class LightX2VModularInference:
-    _current_runner = None
-    _current_config_hash = None
-
-    def __init__(self):
-        if not hasattr(self.__class__, "_current_runner"):
-            self.__class__._current_runner = None
-        if not hasattr(self.__class__, "_current_config_hash"):
-            self.__class__._current_config_hash = None
-
-        self.config_builder = ConfigBuilder()
-        self.temp_manager = TempFileManager()
-        self.image_handler = ImageFileHandler()
-        self.audio_handler = AudioFileHandler()
-        self.resolver = ComfyUIFileResolver()
-        self.http_downloader = HTTPFileDownloader()
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "combined_config": (
-                    "COMBINED_CONFIG",
-                    {"tooltip": "Combined configuration from config combiner"},
-                ),
-                "prompt": (
-                    "STRING",
-                    {"multiline": True, "default": "", "tooltip": "Generation prompt"},
-                ),
-                "negative_prompt": (
-                    "STRING",
-                    {"multiline": True, "default": "", "tooltip": "Negative prompt"},
-                ),
-            },
-            "optional": {
-                "image": ("IMAGE", {"tooltip": "Input image for i2v or s2v task"}),
-                "audio": (
-                    "AUDIO",
-                    {"tooltip": "Input audio for audio-driven generation for s2v task"},
-                ),
-            },
-        }
-
-    RETURN_TYPES = ("IMAGE", "AUDIO")
-    RETURN_NAMES = ("images", "audio")
-    FUNCTION = "generate"
-    CATEGORY = "LightX2V/Inference"
-
-    def _get_config_hash(self, config) -> str:
-        """Get hash of configuration to detect changes."""
-        return self.config_builder.get_config_hash(config)
-
-    def generate(
-        self,
-        combined_config,
-        prompt,
-        negative_prompt,
-        image=None,
-        audio=None,
-        **kwargs,
-    ):
-        # config type is EasyDict
-        config = combined_config
-        config.prompt = prompt
-        config.negative_prompt = negative_prompt
-
-        if config.task in ["i2v", "s2v", "rs2v"] and image is None:
-            raise ValueError(f"{config.task} task requires input image")
-
-        try:
-            # Handle image input
-            if config.task in ["i2v", "s2v", "rs2v"] and image is not None:
-                image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
-                pil_image = Image.fromarray(image_np)
-
-                temp_path = self.temp_manager.create_temp_file(suffix=".png")
-                pil_image.save(temp_path)
-                config.image_path = temp_path
-                logging.info(f"Image saved to {temp_path}")
-
-            # Handle audio input for seko models
-            if audio is not None and hasattr(config, "model_cls") and "seko" in config.model_cls:
-                temp_path = self.temp_manager.create_temp_file(suffix=".wav")
-                self.audio_handler.save(audio, temp_path)
-                config.audio_path = temp_path
-                logging.info(f"Audio saved to {temp_path}")
-
-            # Handle talk objects
-            if hasattr(config, "talk_objects") and config.talk_objects:
-                talk_objects = config.talk_objects
-                processed_talk_objects = []
-
-                for talk_obj in talk_objects:
-                    processed_obj = {}
-
-                    if "audio" in talk_obj:
-                        processed_obj["audio"] = talk_obj["audio"]
-
-                    if "mask" in talk_obj:
-                        processed_obj["mask"] = talk_obj["mask"]
-
-                    if "audio" in processed_obj:
-                        processed_talk_objects.append(processed_obj)
-
-                # Resolve paths and download URLs
-                for obj in processed_talk_objects:
-                    if "audio" in obj and obj["audio"]:
-                        audio_path = obj["audio"]
-
-                        # Check if it's a URL and download if needed
-                        if self.http_downloader.is_url(audio_path):
-                            try:
-                                downloaded_path = self.http_downloader.download_if_url(audio_path, prefix="audio")
-                                obj["audio"] = downloaded_path
-                                logging.info(f"Downloaded audio from URL: {audio_path} -> {downloaded_path}")
-                            except Exception as e:
-                                logging.error(f"Failed to download audio from {audio_path}: {e}")
-                                continue
-                        # Handle relative paths
-                        elif not os.path.isabs(audio_path) and not audio_path.startswith("/tmp"):
-                            obj["audio"] = self.resolver.resolve_input_path(audio_path)
-                            logging.info(f"Resolved audio path: {audio_path} -> {obj['audio']}")
-
-                        # Check if file exists
-                        if not os.path.exists(obj["audio"]):
-                            logging.warning(f"Audio file not found: {obj['audio']}")
-
-                    if "mask" in obj and obj["mask"]:
-                        mask_path = obj["mask"]
-
-                        # Check if it's a URL and download if needed
-                        if self.http_downloader.is_url(mask_path):
-                            try:
-                                downloaded_path = self.http_downloader.download_if_url(mask_path, prefix="mask")
-                                obj["mask"] = downloaded_path
-                                logging.info(f"Downloaded mask from URL: {mask_path} -> {downloaded_path}")
-                            except Exception as e:
-                                logging.error(f"Failed to download mask from {mask_path}: {e}")
-                                # Don't skip the object if mask download fails (mask is optional)
-                        # Handle relative paths
-                        elif not os.path.isabs(mask_path) and not mask_path.startswith("/tmp"):
-                            obj["mask"] = self.resolver.resolve_input_path(mask_path)
-                            logging.info(f"Resolved mask path: {mask_path} -> {obj['mask']}")
-
-                        # Check if file exists
-                        if not os.path.exists(obj["mask"]):
-                            logging.warning(f"Mask file not found: {obj['mask']}")
-
-                if processed_talk_objects:
-                    config.talk_objects = processed_talk_objects
-                    logging.info(f"Processed {len(processed_talk_objects)} talk objects")
-
-            logging.info("lightx2v config: " + json.dumps(config, indent=2, ensure_ascii=False))
-
-            config_hash = self._get_config_hash(config)
-
-            current_runner = getattr(self.__class__, "_current_runner", None)
-            current_config_hash = getattr(self.__class__, "_current_config_hash", None)
-
-            needs_reinit = current_runner is None or current_config_hash != config_hash or getattr(config, "lazy_load", False)
-
-            logging.info(f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}")
-            if needs_reinit:
-                if current_runner is not None:
-                    # current_runner.end_run()
-                    del self.__class__._current_runner
-                    torch.cuda.empty_cache()
-                    gc.collect()
-                formated_config = set_config(config)
-                self.__class__._current_runner = init_runner(formated_config)
-                self.__class__._current_config_hash = config_hash
-
-            progress = ProgressBar(100)
-
-            def update_progress(current_step, _total):
-                progress.update_absolute(current_step)
-
-            current_runner = getattr(self.__class__, "_current_runner", None)
-
-            if hasattr(current_runner, "set_progress_callback"):
-                current_runner.set_progress_callback(update_progress)
-
-            config["return_result_tensor"] = True
-            config["save_result_path"] = ""
-            config["negative_prompt"] = config.get("negative_prompt", "")
-            input_info = init_empty_input_info(config.task)
-            update_input_info_from_dict(input_info, config)
-
-            current_runner.set_config(config)
-            result_dict = current_runner.run_pipeline(input_info)
-            images = result_dict.get("video", None)
-            audio = result_dict.get("audio", None)
-
-            if images is not None and images.numel() > 0:
-                images = images.cpu()
-                if images.dtype != torch.float32:
-                    images = images.float()
-
-            if getattr(config, "unload_after_inference", False):
-                if hasattr(self.__class__, "_current_runner"):
-                    del self.__class__._current_runner
-                self.__class__._current_runner = None
-                self.__class__._current_config_hash = None
-
-            torch.cuda.empty_cache()
-            gc.collect()
-
-            return (images, audio)
-
-        except Exception as e:
-            logging.error(f"Error during inference: {e}")
-            raise
-
-        finally:
-            # Cleanup is handled by TempFileManager destructor
-            pass
-
-
 class LightX2VConfigCombinerV2:
     """Config combiner that also handles data preparation (image/audio/prompts)."""
 
@@ -1816,10 +1598,10 @@ class LightX2VModularInferenceV2:
                 # current_runner.set_config(config)
                 result_dict = current_runner.run_pipeline(config)
             else:
-                input_info = init_empty_input_info(config.task)
-                update_input_info_from_dict(input_info, config)
+                input_data = init_empty_input_info(config.task)
+                update_input_info_from_dict(input_data, config)
                 current_runner.set_config(config)
-                result_dict = current_runner.run_pipeline(input_info)
+                result_dict = current_runner.run_pipeline(input_data)
 
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)
@@ -1856,7 +1638,6 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VMemoryOptimization": LightX2VMemoryOptimization,
     "LightX2VLoRALoader": LightX2VLoRALoader,
     "LightX2VConfigCombiner": LightX2VConfigCombiner,
-    "LightX2VModularInference": LightX2VModularInference,
     "LightX2VConfigCombinerV2": LightX2VConfigCombinerV2,
     "LightX2VConfigCombinerV3": LightX2VConfigCombinerV3,
     "LightX2VModularInferenceV2": LightX2VModularInferenceV2,
@@ -1873,7 +1654,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VMemoryOptimization": "LightX2V Memory Optimization",
     "LightX2VLoRALoader": "LightX2V LoRA Loader",
     "LightX2VConfigCombiner": "LightX2V Config Combiner",
-    "LightX2VModularInference": "LightX2V Modular Inference",
     "LightX2VConfigCombinerV2": "LightX2V Config Combiner V2",
     "LightX2VConfigCombinerV3": "LightX2V Config Combiner V3",
     "LightX2VModularInferenceV2": "LightX2V Modular Inference V2",
