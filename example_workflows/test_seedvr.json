@@ -1,0 +1,94 @@
+{
+    "1": {
+      "inputs": {
+        "video": "1954627330480766977_wan2-2.mp4",
+        "force_rate": 0,
+        "custom_width": 0,
+        "custom_height": 0,
+        "frame_load_cap": 0,
+        "skip_first_frames": 0,
+        "select_every_nth": 1,
+        "format": "AnimateDiff"
+      },
+      "class_type": "VHS_LoadVideo",
+      "_meta": {
+        "title": "Load Video (Upload) 🎥🅥🅗🅢"
+      }
+    },
+    "4": {
+      "inputs": {
+        "ckpt_name": "seedvr2_ema_3b_fp8.safetensors",
+        "precision": "fp8-sgl",
+        "cpu_offload": false,
+        "use_tiling_vae": true
+      },
+      "class_type": "LightX2VSeedVR2Loader",
+      "_meta": {
+        "title": "LightX2V SeedVR2 Loader"
+      }
+    },
+    "5": {
+      "inputs": {
+        "target_height": 1920,
+        "target_width": 1080,
+        "infer_steps": 1,
+        "segment_length": 81,
+        "segment_overlap": 1,
+        "seed": 3816942657,
+        "source_fps": 16,
+        "model": [
+          "4",
+          0
+        ],
+        "images": [
+          "1",
+          0
+        ]
+      },
+      "class_type": "LightX2VSeedVR2Sampler",
+      "_meta": {
+        "title": "LightX2V SeedVR2 Sampler"
+      }
+    },
+    "6": {
+      "inputs": {
+        "video_info": [
+          "1",
+          3
+        ]
+      },
+      "class_type": "VHS_VideoInfo",
+      "_meta": {
+        "title": "Video Info 🎥🅥🅗🅢"
+      }
+    },
+    "7": {
+      "inputs": {
+        "frame_rate": [
+          "6",
+          0
+        ],
+        "loop_count": 0,
+        "filename_prefix": "AnimateDiff",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "images": [
+          "5",
+          0
+        ],
+        "audio": [
+          "1",
+          2
+        ]
+      },
+      "class_type": "VHS_VideoCombine",
+      "_meta": {
+        "title": "Video Combine 🎥🅥🅗🅢"
+      }
+    }
+  }
