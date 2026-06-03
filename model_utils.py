@@ -42,6 +42,7 @@ def support_model_cls_list() -> List[str]:
         "wan2.2_audio",
         "wan2.2_moe_distill",
         "qwen_image",
+        "seedvr2",
     ]
 
 
