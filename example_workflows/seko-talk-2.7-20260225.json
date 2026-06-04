@@ -1,0 +1,141 @@
+{
+  "11": {
+    "inputs": {
+      "audio": "12秒.mp3",
+      "start_time": 0,
+      "duration": 0
+    },
+    "class_type": "VHS_LoadAudioUpload",
+    "_meta": {
+      "title": "Load Audio (Upload)🎥🅥🅗🅢"
+    }
+  },
+  "13": {
+    "inputs": {
+      "prompt": "The video feature the person is talking. 双手不动",
+      "negative_prompt": "",
+      "inference_config": [
+        "14",
+        0
+      ],
+      "image": [
+        "20",
+        0
+      ],
+      "audio": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "LightX2VConfigCombinerV2",
+    "_meta": {
+      "title": "LightX2V Config Combiner V2"
+    }
+  },
+  "14": {
+    "inputs": {
+      "model_cls": "seko_talk",
+      "model_name": "SekoTalk-v2.7_beta2-bf16-step4_temp",
+      "task": "rs2v",
+      "infer_steps": 4,
+      "seed": 4221706066,
+      "cfg_scale": 1,
+      "cfg_scale2": 1,
+      "sample_shift": 5,
+      "height": 1280,
+      "width": 720,
+      "duration": 5,
+      "attention_type": "sage_attn2",
+      "denoising_steps": "",
+      "resize_mode": "adaptive",
+      "fixed_area": "480p",
+      "segment_length": 81,
+      "prev_frame_length": 5,
+      "use_tiny_vae": false
+    },
+    "class_type": "LightX2VInferenceConfig",
+    "_meta": {
+      "title": "LightX2V Inference Config"
+    }
+  },
+  "15": {
+    "inputs": {
+      "prepared_config": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "LightX2VModularInferenceV2",
+    "_meta": {
+      "title": "LightX2V Modular Inference V2"
+    }
+  },
+  "18": {
+    "inputs": {
+      "frame_rate": [
+        "22",
+        0
+      ],
+      "loop_count": 0,
+      "filename_prefix": "vigen-15ebb023",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 23,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": false,
+      "images": [
+        "21",
+        0
+      ],
+      "audio": [
+        "15",
+        1
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "20": {
+    "inputs": {
+      "image": "00000.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "21": {
+    "inputs": {
+      "source_fps": 16,
+      "target_fps": [
+        "22",
+        0
+      ],
+      "scale": 1,
+      "model_name": "flownet.pkl",
+      "batch_size": 8,
+      "use_fp16": true,
+      "images": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "RIFEInterpolation",
+    "_meta": {
+      "title": "RIFE Frame Interpolation"
+    }
+  },
+  "22": {
+    "inputs": {
+      "value": 25.000000000000007
+    },
+    "class_type": "FloatConstant",
+    "_meta": {
+      "title": "target fps"
+    }
+  }
+}

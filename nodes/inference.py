@@ -9,7 +9,7 @@ from comfy.utils import ProgressBar
 from ..config_builder import ConfigBuilder
 from ..lightx2v.lightx2v.infer import init_runner
 from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
-from ..lightx2v.lightx2v.utils.set_config import set_config
+from ..lightx2v.lightx2v.utils.set_config import auto_calc_config, set_args2config
 
 
 class LightX2VModularInferenceV2:
@@ -17,14 +17,6 @@ class LightX2VModularInferenceV2:
 
     _current_runner = None
     _current_config_hash = None
-
-    def __init__(self):
-        if not hasattr(self.__class__, "_current_runner"):
-            self.__class__._current_runner = None
-        if not hasattr(self.__class__, "_current_config_hash"):
-            self.__class__._current_config_hash = None
-
-        self.config_builder = ConfigBuilder()
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -42,13 +34,21 @@ class LightX2VModularInferenceV2:
     FUNCTION = "generate"
     CATEGORY = "LightX2V/InferenceV2"
 
-    def _get_config_hash(self, config) -> str:
-        """Get hash of configuration to detect changes."""
-        return self.config_builder.get_config_hash(config)
+    @classmethod
+    def _release_runner(cls):
+        """Drop the singleton runner + force VRAM teardown via DefaultRunner.__del__.
+
+        Callers MUST drop their own local refs to the old runner *before* invoking
+        this — otherwise the refcount stays > 0, __del__ doesn't fire, and the
+        next model load OOMs (model_a + model_b alive on GPU at the same time).
+        """
+        cls._current_runner = None
+        cls._current_config_hash = None
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def _build_rs2v_shot_config(self, config):
         from ..lightx2v.lightx2v.shot_runner.shot_base import load_clip_configs
-        from ..lightx2v.lightx2v.utils.lockable_dict import LockableDict
 
         config_json = config.get("config_json")
         if config_json:
@@ -56,17 +56,31 @@ class LightX2VModularInferenceV2:
         elif config.get("clip_configs"):
             main_cfg = config
         else:
+            # load_clip_configs only runs set_config() on the "path" branch; for
+            # in-memory clip configs we have to do it ourselves, otherwise framework
+            # defaults (vae_stride, patch_size, ...) and the model's config.json
+            # never get merged — rs2v_infer then KeyErrors on config["vae_stride"].
+            if "task" not in config:
+                config["task"] = "rs2v"
+            # set_config = set_args2config + auto_calc_config. set_args2config strips
+            # any key that's part of an InputInfo dataclass (target_video_length,
+            # infer_steps, seed, ...). For CLI runs auto_calc_config recovers them
+            # by merging --config_json, but we have no external JSON, so
+            # auto_calc_config's `config["target_video_length"]` access KeyErrors.
+            # Inject the bridge between set_args2config and auto_calc_config.
+            target_video_length = config.get("target_video_length", config.get("segment_length", config.get("video_length", 81)))
+            formatted = set_args2config(config)
+            formatted["target_video_length"] = target_video_length
+            formatted = auto_calc_config(formatted)
             main_cfg = {
                 "lightx2v_path": "",
                 "clip_configs": [
                     {
                         "name": "rs2v_clip",
-                        "config": LockableDict(config),
+                        "config": formatted,
                     }
                 ],
             }
-            if "task" not in main_cfg["clip_configs"][0]["config"]:
-                main_cfg["clip_configs"][0]["config"]["task"] = "rs2v"
 
         if isinstance(main_cfg, dict) and "lightx2v_path" not in main_cfg:
             main_cfg = dict(main_cfg)
@@ -78,9 +92,18 @@ class LightX2VModularInferenceV2:
         """Run inference with prepared configuration."""
 
         config = prepared_config
+        # Combiner may have stashed the input AUDIO in the in-memory shim and
+        # set audio_path to a sentinel — release it on exit so the tensor isn't
+        # retained across runs (one ComfyUI graph tick = one sentinel).
+        from ._audio_shim import is_sentinel as _is_audio_sentinel
+        from ._audio_shim import release as _release_audio_sentinel
+
+        _audio_sentinel = config.get("audio_path") if isinstance(config, dict) else getattr(config, "audio_path", None)
+        if not _is_audio_sentinel(_audio_sentinel):
+            _audio_sentinel = None
 
         try:
-            config_hash = self._get_config_hash(config)
+            config_hash = ConfigBuilder.get_config_hash(config)
 
             current_runner = getattr(self.__class__, "_current_runner", None)
             current_config_hash = getattr(self.__class__, "_current_config_hash", None)
@@ -90,16 +113,29 @@ class LightX2VModularInferenceV2:
             logging.info(f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}")
             if needs_reinit:
                 if current_runner is not None:
-                    del self.__class__._current_runner
-                    torch.cuda.empty_cache()
-                    gc.collect()
+                    # Free old runner VRAM BEFORE constructing the new one, otherwise
+                    # both models live on GPU during the second load -> OOM (seen when
+                    # switching v2.5 s2v -> v2.7 rs2v).
+                    current_runner = None
+                    self._release_runner()
                 if config.get("task") == "rs2v":
                     from ..lightx2v.lightx2v.shot_runner.rs2v_infer import ShotRS2VPipeline
 
                     shot_cfg = self._build_rs2v_shot_config(config)
                     self.__class__._current_runner = ShotRS2VPipeline(shot_cfg)
                 else:
-                    formatted_config = set_config(config)
+                    # set_args2config strips InputInfo-dataclass keys (target_video_length,
+                    # infer_steps, ...). CLI flows recover them via --config_json merging
+                    # inside auto_calc_config; our in-memory flow has no external JSON, so
+                    # we bridge target_video_length manually between the two halves so
+                    # auto_calc_config:194's modulo check on s2v/i2v doesn't KeyError.
+                    target_video_length = config.get(
+                        "target_video_length",
+                        config.get("segment_length", config.get("video_length", 81)),
+                    )
+                    formatted_config = set_args2config(config)
+                    formatted_config["target_video_length"] = target_video_length
+                    formatted_config = auto_calc_config(formatted_config)
                     self.__class__._current_runner = init_runner(formatted_config)
                 self.__class__._current_config_hash = config_hash
 
@@ -133,16 +169,17 @@ class LightX2VModularInferenceV2:
                     images = images.float()
 
             if getattr(config, "unload_after_inference", False):
-                if hasattr(self.__class__, "_current_runner"):
-                    del self.__class__._current_runner
-                self.__class__._current_runner = None
-                self.__class__._current_config_hash = None
-
-            torch.cuda.empty_cache()
-            gc.collect()
+                current_runner = None  # drop local ref so __del__ can run
+                self._release_runner()
+            else:
+                torch.cuda.empty_cache()
+                gc.collect()
 
             return (images, audio)
 
         except Exception as e:
             logging.error(f"Error during inference: {e}")
             raise
+        finally:
+            if _audio_sentinel is not None:
+                _release_audio_sentinel(_audio_sentinel)

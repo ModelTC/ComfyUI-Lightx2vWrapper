@@ -92,7 +92,10 @@ class LightX2VSeedVR2Loader:
                         "tooltip": "auto = bf16 for fp16/bf16 weights, fp8-sgl for fp8 weights. fp8-sgl needs sgl-kernel (H100/SM90); fp8-q8f is the 4090 path.",
                     },
                 ),
-                "cpu_offload": ("BOOLEAN", {"default": False, "tooltip": "Offload DiT blocks to CPU between forwards (slower; only needed on small VRAM)"}),
+                "cpu_offload": (
+                    "BOOLEAN",
+                    {"default": False, "tooltip": "Offload DiT blocks to CPU between forwards (slower; only needed on small VRAM)"},
+                ),
                 "use_tiling_vae": ("BOOLEAN", {"default": True, "tooltip": "Tile VAE to reduce peak memory"}),
             }
         }
@@ -157,13 +160,34 @@ class LightX2VSeedVR2Sampler:
             "required": {
                 "model": ("SEEDVR_MODEL",),
                 "images": ("IMAGE",),
-                "target_height": ("INT", {"default": 1080, "min": 64, "max": 4320, "step": 8, "tooltip": "Target output frame height. NaDiT preserves input aspect ratio; the geometric mean of target_h * target_w is the effective resolution cap."}),
+                "target_height": (
+                    "INT",
+                    {
+                        "default": 1080,
+                        "min": 64,
+                        "max": 4320,
+                        "step": 8,
+                        "tooltip": "Target output frame height. NaDiT preserves input aspect ratio; the geometric mean of target_h * target_w is the effective resolution cap.",
+                    },
+                ),
                 "target_width": ("INT", {"default": 1920, "min": 64, "max": 7680, "step": 8}),
                 "infer_steps": ("INT", {"default": 1, "min": 1, "max": 50}),
-                "segment_length": ("INT", {"default": 81, "min": 16, "max": 512, "step": 1, "tooltip": "Frames per SR pass. Long videos are auto-segmented."}),
+                "segment_length": (
+                    "INT",
+                    {"default": 81, "min": 16, "max": 512, "step": 1, "tooltip": "Frames per SR pass. Long videos are auto-segmented."},
+                ),
                 "segment_overlap": ("INT", {"default": 1, "min": 0, "max": 32}),
                 "seed": ("INT", {"default": 42, "min": 0, "max": 2**32 - 1}),
-                "source_fps": ("FLOAT", {"default": 16.0, "min": 1.0, "max": 120.0, "step": 0.5, "tooltip": "FPS of the input frames (passed through to the runner for any internal timing logic)"}),
+                "source_fps": (
+                    "FLOAT",
+                    {
+                        "default": 16.0,
+                        "min": 1.0,
+                        "max": 120.0,
+                        "step": 0.5,
+                        "tooltip": "FPS of the input frames (passed through to the runner for any internal timing logic)",
+                    },
+                ),
             }
         }
 
@@ -172,8 +196,7 @@ class LightX2VSeedVR2Sampler:
     FUNCTION = "sample"
     CATEGORY = "LightX2V/SeedVR"
 
-    def sample(self, model, images, target_height, target_width,
-               infer_steps, segment_length, segment_overlap, seed, source_fps):
+    def sample(self, model, images, target_height, target_width, infer_steps, segment_length, segment_overlap, seed, source_fps):
         from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
 
         runner = model["runner"]
@@ -193,30 +216,30 @@ class LightX2VSeedVR2Sampler:
         target_geom = math.sqrt(target_height * target_width)
         sr_ratio = max(target_geom / ori_geom, 1.0) if ori_geom > 0 else 1.0
         if target_geom < ori_geom:
-            logger.warning(
-                f"[SeedVR2] target ({target_height}x{target_width}) smaller than input ({ori_h}x{ori_w}); SR will run at input scale."
-            )
+            logger.warning(f"[SeedVR2] target ({target_height}x{target_width}) smaller than input ({ori_h}x{ori_w}); SR will run at input scale.")
 
         _install_tensor_input_shim(runner, frames_u8, source_fps)
 
         # runner.config is a LockableDict (locked after init); set_config uses temporarily_unlocked.
-        runner.set_config({
-            "sr_ratio": float(sr_ratio),
-            "target_height": int(target_height),
-            "target_width": int(target_width),
-            "target_video_length": int(segment_length),  # vestigial for SR; keep aligned with segment_length
-            "sr_segment_length": int(segment_length),
-            "sr_overlap": int(segment_overlap),
-            "infer_steps": int(infer_steps),
-            "seed": int(seed),
-            "fps": float(source_fps),
-            "video_path": "<tensor>",  # truthy sentinel so segmenting logic runs; shim bypasses file I/O
-            "image_path": "",
-            "prompt": "",
-            "negative_prompt": "",
-            "save_result_path": "",
-            "return_result_tensor": True,
-        })
+        runner.set_config(
+            {
+                "sr_ratio": float(sr_ratio),
+                "target_height": int(target_height),
+                "target_width": int(target_width),
+                "target_video_length": int(segment_length),  # vestigial for SR; keep aligned with segment_length
+                "sr_segment_length": int(segment_length),
+                "sr_overlap": int(segment_overlap),
+                "infer_steps": int(infer_steps),
+                "seed": int(seed),
+                "fps": float(source_fps),
+                "video_path": "<tensor>",  # truthy sentinel so segmenting logic runs; shim bypasses file I/O
+                "image_path": "",
+                "prompt": "",
+                "negative_prompt": "",
+                "save_result_path": "",
+                "return_result_tensor": True,
+            }
+        )
 
         input_info = init_empty_input_info("sr")
         update_input_info_from_dict(

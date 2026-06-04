@@ -306,44 +306,48 @@ class ConfigBuilder:
 
         return final_config
 
-    def get_config_hash(self, config: EasyDict) -> str:
-        """Generate hash for configuration to detect changes."""
-        relevant_configs = {
-            "model_cls": getattr(config, "model_cls", None),
-            "model_path": getattr(config, "model_path", None),
-            "task": getattr(config, "task", None),
-            "t5_quantized": getattr(config, "t5_quantized", False),
-            "clip_quantized": getattr(config, "clip_quantized", False),
-            "lora_configs": getattr(config, "lora_configs", None),
-            "cross_attn_1_type": getattr(config, "cross_attn_1_type", None),
-            "cross_attn_2_type": getattr(config, "cross_attn_2_type", None),
-            "self_attn_1_type": getattr(config, "self_attn_1_type", None),
-            "self_attn_2_type": getattr(config, "self_attn_2_type", None),
-            "cpu_offload": getattr(config, "cpu_offload", False),
-            "offload_granularity": getattr(config, "offload_granularity", None),
-            "offload_ratio": getattr(config, "offload_ratio", None),
-            "t5_cpu_offload": getattr(config, "t5_cpu_offload", False),
-            "t5_offload_granularity": getattr(config, "t5_offload_granularity", None),
-            "audio_encoder_cpu_offload": getattr(config, "audio_encoder_cpu_offload", False),
-            "audio_adapter_cpu_offload": getattr(config, "audio_adapter_cpu_offload", False),
-            "vae_cpu_offload": getattr(config, "vae_cpu_offload", False),
-            "use_tiling_vae": getattr(config, "use_tiling_vae", False),
-            "unload_after_inference": getattr(config, "unload_after_inference", False),
-            "enable_rotary_chunk": getattr(config, "enable_rotary_chunk", False),
-            "rotary_chunk_size": getattr(config, "rotary_chunk_size", None),
-            "clean_cuda_cache": getattr(config, "clean_cuda_cache", False),
-            "torch_compile": getattr(config, "torch_compile", False),
-            "threshold": getattr(config, "threshold", None),
-            "use_ret_steps": getattr(config, "use_ret_steps", False),
-            "t5_quant_scheme": getattr(config, "t5_quant_scheme", None),
-            "clip_quant_scheme": getattr(config, "clip_quant_scheme", None),
-            "adapter_quant_scheme": getattr(config, "adapter_quant_scheme", None),
-            "adapter_quantized": getattr(config, "adapter_quantized", False),
-            "feature_caching": getattr(config, "feature_caching", None),
-        }
+    # Keys that affect runner construction (and therefore require a reinit when they
+    # change). Per-call fields like prompt / seed / infer_steps deliberately omitted.
+    # (default, ...) tuples — first element is the value used when the field is absent.
+    _HASH_FIELDS = (
+        ("model_cls", None),
+        ("model_path", None),
+        ("task", None),
+        ("t5_quantized", False),
+        ("clip_quantized", False),
+        ("lora_configs", None),
+        ("cross_attn_1_type", None),
+        ("cross_attn_2_type", None),
+        ("self_attn_1_type", None),
+        ("self_attn_2_type", None),
+        ("cpu_offload", False),
+        ("offload_granularity", None),
+        ("offload_ratio", None),
+        ("t5_cpu_offload", False),
+        ("t5_offload_granularity", None),
+        ("audio_encoder_cpu_offload", False),
+        ("audio_adapter_cpu_offload", False),
+        ("vae_cpu_offload", False),
+        ("use_tiling_vae", False),
+        ("unload_after_inference", False),
+        ("enable_rotary_chunk", False),
+        ("rotary_chunk_size", None),
+        ("clean_cuda_cache", False),
+        ("torch_compile", False),
+        ("threshold", None),
+        ("use_ret_steps", False),
+        ("t5_quant_scheme", None),
+        ("clip_quant_scheme", None),
+        ("adapter_quant_scheme", None),
+        ("adapter_quantized", False),
+        ("feature_caching", None),
+    )
 
-        config_str = json.dumps(relevant_configs, sort_keys=True)
-        return hashlib.md5(config_str.encode()).hexdigest()
+    @staticmethod
+    def get_config_hash(config) -> str:
+        """Hash the runner-construction-relevant config fields. Per-call fields are excluded."""
+        relevant = {k: getattr(config, k, default) for k, default in ConfigBuilder._HASH_FIELDS}
+        return hashlib.md5(json.dumps(relevant, sort_keys=True).encode()).hexdigest()
 
 
 class LoRAChainBuilder:
