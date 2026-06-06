@@ -15,7 +15,10 @@ import argparse
 import gc
 import logging
 import math
+import subprocess
+import tempfile
 import types
+import wave
 from pathlib import Path
 
 import folder_paths
@@ -35,6 +38,143 @@ def _scan_seedvr2_ckpts():
         return ["None"]
     items = sorted(f.name for f in d.iterdir() if f.is_file() and f.suffix == ".safetensors")
     return items or ["None"]
+
+
+def _prepare_output_video(filename_prefix, width, height):
+    full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+        filename_prefix,
+        folder_paths.get_output_directory(),
+        int(width),
+        int(height),
+    )
+    file = f"{filename}_{counter:05}_.mp4"
+    full_path = Path(full_output_folder) / file
+    return full_path, file, subfolder
+
+
+def _split_output_filename(filename):
+    raw = str(filename or "").strip().replace("\\", "/")
+    if not raw:
+        raise ValueError("filename is required")
+
+    output_dir = Path(folder_paths.get_output_directory()).resolve()
+    raw_path = Path(raw)
+    if raw_path.is_absolute():
+        full_path = raw_path.resolve()
+        try:
+            relative_path = full_path.relative_to(output_dir)
+        except ValueError as exc:
+            raise ValueError(f"Expected a file under ComfyUI output, got: {filename}") from exc
+    else:
+        parts = raw_path.parts
+        if parts and parts[0] == "output":
+            parts = parts[1:]
+        relative_path = Path(*parts) if parts else Path()
+        if ".." in relative_path.parts:
+            raise ValueError(f"Output filename cannot contain '..': {filename}")
+
+    if not relative_path.name:
+        raise ValueError(f"Expected an output video filename, got: {filename}")
+
+    full_path = (output_dir / relative_path).resolve()
+    try:
+        full_path.relative_to(output_dir)
+    except ValueError as exc:
+        raise ValueError(f"Expected a file under ComfyUI output, got: {filename}") from exc
+
+    subfolder = relative_path.parent.as_posix()
+    if subfolder == ".":
+        subfolder = ""
+    return relative_path.name, subfolder, relative_path.as_posix(), full_path
+
+
+def _output_video_file_info(filename, validate_exists=True):
+    file, subfolder, relative_name, full_path = _split_output_filename(filename)
+    if validate_exists and not full_path.is_file():
+        raise FileNotFoundError(f"Output video does not exist: {full_path}")
+    return {"filename": file, "subfolder": subfolder, "type": "output"}, relative_name
+
+
+def _output_video_full_path(filename, validate_exists=True):
+    _, _, _, full_path = _split_output_filename(filename)
+    if validate_exists and not full_path.is_file():
+        raise FileNotFoundError(f"Output video does not exist: {full_path}")
+    return full_path
+
+
+def _audio_to_wav(audio, wav_path):
+    if not isinstance(audio, dict):
+        logger.info("[LightX2VOutputVideoPreview] skip audio mux: optional AUDIO input is empty")
+        return False
+    if audio.get("waveform") is None or audio.get("sample_rate") is None:
+        logger.info("[LightX2VOutputVideoPreview] skip audio mux: AUDIO has no waveform/sample_rate")
+        return False
+
+    waveform = audio["waveform"]
+    sample_rate = int(audio["sample_rate"])
+    if sample_rate <= 0:
+        logger.info("[LightX2VOutputVideoPreview] skip audio mux: invalid sample_rate=%s", sample_rate)
+        return False
+    if not torch.is_tensor(waveform) or waveform.numel() == 0:
+        logger.info("[LightX2VOutputVideoPreview] skip audio mux: empty waveform")
+        return False
+    if waveform.dim() == 3:
+        waveform = waveform[0]
+    if waveform.dim() == 1:
+        waveform = waveform.unsqueeze(0)
+    if waveform.dim() != 2:
+        logger.info("[LightX2VOutputVideoPreview] skip audio mux: unsupported waveform shape=%s", tuple(audio["waveform"].shape))
+        return False
+
+    waveform_i16 = (waveform.detach().cpu().float().clamp(-1.0, 1.0) * 32767.0).to(torch.int16)
+    interleaved = waveform_i16.transpose(0, 1).contiguous().numpy()
+    with wave.open(str(wav_path), "wb") as wav:
+        wav.setnchannels(int(waveform_i16.shape[0]))
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(interleaved.tobytes())
+    return True
+
+
+def _mux_audio_into_video(video_path, audio):
+    from imageio_ffmpeg import get_ffmpeg_exe
+
+    video_path = Path(video_path)
+    if not video_path.is_file():
+        raise FileNotFoundError(f"Output video does not exist: {video_path}")
+
+    with tempfile.TemporaryDirectory(prefix=".lightx2v_audio_mux.", dir=str(video_path.parent)) as tmp_dir:
+        wav_path = Path(tmp_dir) / "audio.wav"
+        muxed_path = Path(tmp_dir) / "muxed.mp4"
+        if not _audio_to_wav(audio, wav_path):
+            return False
+
+        command = [
+            get_ffmpeg_exe(),
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(wav_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            str(muxed_path),
+        ]
+        process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if process.returncode != 0:
+            stderr = process.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"FFmpeg audio mux failed: {stderr}")
+        muxed_path.replace(video_path)
+        return True
 
 
 def _install_tensor_input_shim(runner, frames_u8, fps):
@@ -96,7 +236,47 @@ class LightX2VSeedVR2Loader:
                     "BOOLEAN",
                     {"default": False, "tooltip": "Offload DiT blocks to CPU between forwards (slower; only needed on small VRAM)"},
                 ),
-                "use_tiling_vae": ("BOOLEAN", {"default": True, "tooltip": "Tile VAE to reduce peak memory"}),
+                "use_tiling_vae": ("BOOLEAN", {"default": False, "tooltip": "Tile VAE to reduce peak memory; usually keep off on 32GB+ GPUs."}),
+                "vae_tile_size": (
+                    "INT",
+                    {
+                        "default": 1024,
+                        "min": 256,
+                        "max": 2048,
+                        "step": 64,
+                        "tooltip": "Output-space VAE tile size when tiling is enabled. Larger is faster but uses more VRAM.",
+                    },
+                ),
+                "vae_tile_overlap": (
+                    "INT",
+                    {
+                        "default": 32,
+                        "min": 0,
+                        "max": 256,
+                        "step": 8,
+                        "tooltip": "Output-space VAE tile overlap when tiling is enabled. Smaller is faster but may increase tile seams.",
+                    },
+                ),
+                "vae_causal_slice_size": (
+                    "INT",
+                    {
+                        "default": 16,
+                        "min": 0,
+                        "max": 64,
+                        "step": 1,
+                        "tooltip": "Temporal VAE slice size. 0 disables causal slicing. Larger is faster but uses more VRAM.",
+                    },
+                ),
+                "vae_memory_limit_gb": (
+                    "FLOAT",
+                    {
+                        "default": 2.0,
+                        "min": 0.0,
+                        "max": 16.0,
+                        "step": 0.25,
+                        "tooltip": "Per-op VAE conv/norm memory limit in GiB. 0 disables this extra splitting.",
+                    },
+                ),
             }
         }
 
@@ -105,7 +285,17 @@ class LightX2VSeedVR2Loader:
     FUNCTION = "load"
     CATEGORY = "LightX2V/SeedVR"
 
-    def load(self, ckpt_name, precision, cpu_offload, use_tiling_vae):
+    def load(
+        self,
+        ckpt_name,
+        precision,
+        cpu_offload,
+        use_tiling_vae,
+        vae_tile_size,
+        vae_tile_overlap,
+        vae_causal_slice_size,
+        vae_memory_limit_gb,
+    ):
         from ..lightx2v.lightx2v.infer import init_runner
         from ..lightx2v.lightx2v.utils.set_config import set_config
 
@@ -136,6 +326,10 @@ class LightX2VSeedVR2Loader:
             "target_height": 1080,
             "target_width": 1920,
             "use_tiling_vae": bool(use_tiling_vae),
+            "vae_tile_size": int(vae_tile_size),
+            "vae_tile_overlap": int(vae_tile_overlap),
+            "vae_causal_slice_size": int(vae_causal_slice_size),
+            "vae_memory_limit_gb": float(vae_memory_limit_gb),
             "cpu_offload": bool(cpu_offload),
         }
         if precision.startswith("fp8-"):
@@ -147,7 +341,17 @@ class LightX2VSeedVR2Loader:
 
         formatted = set_config(argparse.Namespace(**config))
         runner = init_runner(formatted)
-        logger.info(f"[SeedVR2Loader] loaded {ckpt_name} ({precision}); cpu_offload={cpu_offload}, tile_vae={use_tiling_vae}")
+        logger.info(
+            "[SeedVR2Loader] loaded %s (%s); cpu_offload=%s, tile_vae=%s, tile=%s, overlap=%s, slice=%s, mem_limit=%sGiB",
+            ckpt_name,
+            precision,
+            cpu_offload,
+            use_tiling_vae,
+            vae_tile_size,
+            vae_tile_overlap,
+            vae_causal_slice_size,
+            vae_memory_limit_gb,
+        )
         return ({"runner": runner, "precision": precision, "ckpt": ckpt_name},)
 
 
@@ -160,6 +364,7 @@ class LightX2VSeedVR2Sampler:
             "required": {
                 "model": ("SEEDVR_MODEL",),
                 "images": ("IMAGE",),
+                "target_width": ("INT", {"default": 1920, "min": 64, "max": 7680, "step": 8}),
                 "target_height": (
                     "INT",
                     {
@@ -170,7 +375,6 @@ class LightX2VSeedVR2Sampler:
                         "tooltip": "Target output frame height. NaDiT preserves input aspect ratio; the geometric mean of target_h * target_w is the effective resolution cap.",
                     },
                 ),
-                "target_width": ("INT", {"default": 1920, "min": 64, "max": 7680, "step": 8}),
                 "infer_steps": ("INT", {"default": 1, "min": 1, "max": 50}),
                 "segment_length": (
                     "INT",
@@ -188,15 +392,44 @@ class LightX2VSeedVR2Sampler:
                         "tooltip": "FPS of the input frames (passed through to the runner for any internal timing logic)",
                     },
                 ),
+                "save_to_output_file": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Save the SR result directly under ComfyUI output and return a filename instead of returning the full IMAGE tensor.",
+                    },
+                ),
+                "filename_prefix": ("STRING", {"default": "lightx2v_seedvr2/SeedVR2"}),
+                "color_fix": (
+                    ["gpu", "off", "cpu"],
+                    {
+                        "default": "gpu",
+                        "tooltip": "SeedVR color correction after VAE decode. gpu is faster on high-VRAM GPUs; off is fastest; cpu matches the original path.",
+                    },
+                ),
             }
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("images",)
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("images", "filename")
     FUNCTION = "sample"
     CATEGORY = "LightX2V/SeedVR"
 
-    def sample(self, model, images, target_height, target_width, infer_steps, segment_length, segment_overlap, seed, source_fps):
+    def sample(
+        self,
+        model,
+        images,
+        target_height,
+        target_width,
+        infer_steps,
+        segment_length,
+        segment_overlap,
+        seed,
+        source_fps,
+        save_to_output_file,
+        filename_prefix,
+        color_fix,
+    ):
         from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
 
         runner = model["runner"]
@@ -219,6 +452,12 @@ class LightX2VSeedVR2Sampler:
             logger.warning(f"[SeedVR2] target ({target_height}x{target_width}) smaller than input ({ori_h}x{ori_w}); SR will run at input scale.")
 
         _install_tensor_input_shim(runner, frames_u8, source_fps)
+        save_path = ""
+        output_file = ""
+        output_subfolder = ""
+        if save_to_output_file:
+            full_path, output_file, output_subfolder = _prepare_output_video(filename_prefix, target_width, target_height)
+            save_path = str(full_path)
 
         # runner.config is a LockableDict (locked after init); set_config uses temporarily_unlocked.
         runner.set_config(
@@ -236,8 +475,9 @@ class LightX2VSeedVR2Sampler:
                 "image_path": "",
                 "prompt": "",
                 "negative_prompt": "",
-                "save_result_path": "",
-                "return_result_tensor": True,
+                "save_result_path": save_path,
+                "return_result_tensor": not bool(save_to_output_file),
+                "color_fix": str(color_fix),
             }
         )
 
@@ -251,8 +491,8 @@ class LightX2VSeedVR2Sampler:
                 "negative_prompt": "",
                 "seed": int(seed),
                 "sr_ratio": float(sr_ratio),
-                "save_result_path": "",
-                "return_result_tensor": True,
+                "save_result_path": save_path,
+                "return_result_tensor": not bool(save_to_output_file),
             },
         )
 
@@ -267,9 +507,62 @@ class LightX2VSeedVR2Sampler:
             gc.collect()
 
         video = result.get("video") if isinstance(result, dict) else result
+        if save_to_output_file:
+            if not Path(save_path).is_file():
+                raise RuntimeError(f"SeedVR2 did not create expected output video: {save_path}")
+            placeholder = torch.zeros((1, 1, 1, 3), dtype=torch.float32)
+            relative_name = str(Path(output_subfolder) / output_file) if output_subfolder else output_file
+            return (placeholder, relative_name)
+
         if video is None or video.numel() == 0:
             raise RuntimeError("SeedVR2 returned empty result")
 
         # wan_vae_to_comfy already gives [T, H, W, C] float[0,1] on CPU
         video = video.detach().cpu().float().clamp(0.0, 1.0)
-        return (video,)
+        return (video, "")
+
+
+class LightX2VOutputVideoPreview:
+    """Expose an existing ComfyUI output video to the history/view API."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "filename": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "forceInput": True,
+                        "tooltip": "Video path under ComfyUI output, e.g. file.mp4, subfolder/file.mp4, or output/subfolder/file.mp4.",
+                    },
+                ),
+                "validate_exists": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Check that the output video exists before creating the preview entry."},
+                ),
+                "mux_audio": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Mux optional AUDIO input into the output video before previewing."},
+                ),
+            },
+            "optional": {
+                "audio": (
+                    "AUDIO",
+                    {"tooltip": "Optional audio from Load Video/Get Video Components to merge into the output MP4."},
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("filename",)
+    FUNCTION = "preview"
+    OUTPUT_NODE = True
+    CATEGORY = "LightX2V/Output"
+
+    def preview(self, filename, validate_exists, mux_audio, audio=None):
+        if bool(mux_audio) and audio is not None:
+            video_path = _output_video_full_path(filename, bool(validate_exists))
+            _mux_audio_into_video(video_path, audio)
+        file_info, relative_name = _output_video_file_info(filename, bool(validate_exists))
+        return {"ui": {"images": [file_info], "animated": (True,)}, "result": (relative_name,)}

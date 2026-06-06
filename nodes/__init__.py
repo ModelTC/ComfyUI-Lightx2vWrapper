@@ -21,7 +21,7 @@ from .config import (
 )
 from .inference import LightX2VModularInferenceV2
 from .lora import LightX2VLoRALoader
-from .seedvr import LightX2VSeedVR2Loader, LightX2VSeedVR2Sampler
+from .seedvr import LightX2VOutputVideoPreview, LightX2VSeedVR2Loader, LightX2VSeedVR2Sampler
 from .talk import (
     TalkObjectInput,
     TalkObjectsCombiner,
@@ -40,6 +40,7 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VModularInferenceV2": LightX2VModularInferenceV2,
     "LightX2VSeedVR2Loader": LightX2VSeedVR2Loader,
     "LightX2VSeedVR2Sampler": LightX2VSeedVR2Sampler,
+    "LightX2VOutputVideoPreview": LightX2VOutputVideoPreview,
     "LightX2VTalkObjectInput": TalkObjectInput,
     "LightX2VTalkObjectsCombiner": TalkObjectsCombiner,
     "LightX2VTalkObjectsFromJSON": TalkObjectsFromJSON,
@@ -57,6 +58,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VModularInferenceV2": "LightX2V Modular Inference V2",
     "LightX2VSeedVR2Loader": "LightX2V SeedVR2 Loader",
     "LightX2VSeedVR2Sampler": "LightX2V SeedVR2 Sampler",
+    "LightX2VOutputVideoPreview": "LightX2V Output Video Preview",
     "LightX2VTalkObjectInput": "LightX2V Talk Object Input (Single)",
     "LightX2VTalkObjectsCombiner": "LightX2V Talk Objects Combiner",
     "LightX2VTalkObjectsFromFiles": "LightX2V Talk Objects From Files",
