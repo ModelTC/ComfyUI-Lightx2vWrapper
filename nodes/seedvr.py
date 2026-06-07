@@ -15,10 +15,12 @@ import argparse
 import gc
 import logging
 import math
+import shutil
 import subprocess
 import tempfile
 import types
 import wave
+from collections.abc import Mapping
 from pathlib import Path
 
 import folder_paths
@@ -103,8 +105,8 @@ def _output_video_full_path(filename, validate_exists=True):
 
 
 def _audio_to_wav(audio, wav_path):
-    if not isinstance(audio, dict):
-        logger.info("[LightX2VOutputVideoPreview] skip audio mux: optional AUDIO input is empty")
+    if not isinstance(audio, Mapping):
+        logger.info("[LightX2VOutputVideoPreview] skip audio mux: unsupported AUDIO input type=%s", type(audio).__name__)
         return False
     if audio.get("waveform") is None or audio.get("sample_rate") is None:
         logger.info("[LightX2VOutputVideoPreview] skip audio mux: AUDIO has no waveform/sample_rate")
@@ -136,6 +138,11 @@ def _audio_to_wav(audio, wav_path):
     return True
 
 
+def _audio_mux_path(video_path):
+    video_path = Path(video_path)
+    return video_path.with_name(f"{video_path.stem}-audio{video_path.suffix}")
+
+
 def _mux_audio_into_video(video_path, audio):
     from imageio_ffmpeg import get_ffmpeg_exe
 
@@ -145,9 +152,10 @@ def _mux_audio_into_video(video_path, audio):
 
     with tempfile.TemporaryDirectory(prefix=".lightx2v_audio_mux.", dir=str(video_path.parent)) as tmp_dir:
         wav_path = Path(tmp_dir) / "audio.wav"
-        muxed_path = Path(tmp_dir) / "muxed.mp4"
+        muxed_tmp_path = Path(tmp_dir) / "muxed.mp4"
+        muxed_path = _audio_mux_path(video_path)
         if not _audio_to_wav(audio, wav_path):
-            return False
+            return None
 
         command = [
             get_ffmpeg_exe(),
@@ -167,14 +175,16 @@ def _mux_audio_into_video(video_path, audio):
             "-b:a",
             "192k",
             "-shortest",
-            str(muxed_path),
+            str(muxed_tmp_path),
         ]
         process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if process.returncode != 0:
             stderr = process.stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"FFmpeg audio mux failed: {stderr}")
-        muxed_path.replace(video_path)
-        return True
+        shutil.copy2(muxed_tmp_path, muxed_path)
+        muxed_tmp_path.replace(video_path)
+        logger.info("[LightX2VOutputVideoPreview] muxed audio into %s and updated %s", muxed_path, video_path)
+        return muxed_path
 
 
 def _install_tensor_input_shim(runner, frames_u8, fps):
@@ -182,6 +192,9 @@ def _install_tensor_input_shim(runner, frames_u8, fps):
 
     frames_u8: torch.uint8 [T, C, H, W] on CPU (same format as torchvision.io.read_video output).
     """
+    if not hasattr(runner, "_lightx2v_original_run_input_encoder_local_sr"):
+        runner._lightx2v_original_run_input_encoder_local_sr = runner._run_input_encoder_local_sr.__func__
+
     runner._tensor_input = frames_u8
     runner._tensor_input_fps = float(fps)
 
@@ -196,7 +209,7 @@ def _install_tensor_input_shim(runner, frames_u8, fps):
             return torch.empty(0, 3, 0, 0, dtype=torch.uint8)
         return seg
 
-    original_encoder = runner._run_input_encoder_local_sr.__func__
+    original_encoder = runner._lightx2v_original_run_input_encoder_local_sr
 
     def _run_input_encoder_local_sr(self):
         if getattr(self, "_sr_segment", None) is None:
@@ -211,6 +224,12 @@ def _install_tensor_input_shim(runner, frames_u8, fps):
     runner._read_video_segment = types.MethodType(_read_video_segment, runner)
     runner._run_input_encoder_local_sr = types.MethodType(_run_input_encoder_local_sr, runner)
     runner.run_input_encoder = runner._run_input_encoder_local_sr
+
+
+def _clear_tensor_input_shim(runner):
+    for attr in ("_tensor_input", "_tensor_input_fps"):
+        if hasattr(runner, attr):
+            delattr(runner, attr)
 
 
 class LightX2VSeedVR2Loader:
@@ -503,6 +522,7 @@ class LightX2VSeedVR2Sampler:
         try:
             result = runner.run_pipeline(input_info)
         finally:
+            _clear_tensor_input_shim(runner)
             torch.cuda.empty_cache()
             gc.collect()
 
@@ -561,8 +581,11 @@ class LightX2VOutputVideoPreview:
     CATEGORY = "LightX2V/Output"
 
     def preview(self, filename, validate_exists, mux_audio, audio=None):
+        preview_filename = filename
         if bool(mux_audio) and audio is not None:
             video_path = _output_video_full_path(filename, bool(validate_exists))
-            _mux_audio_into_video(video_path, audio)
-        file_info, relative_name = _output_video_file_info(filename, bool(validate_exists))
+            muxed_path = _mux_audio_into_video(video_path, audio)
+            if muxed_path is not None:
+                preview_filename = str(muxed_path)
+        file_info, relative_name = _output_video_file_info(preview_filename, bool(validate_exists))
         return {"ui": {"images": [file_info], "animated": (True,)}, "result": (relative_name,)}
