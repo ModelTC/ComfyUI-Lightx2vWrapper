@@ -351,6 +351,9 @@ class LightX2VSeedVR2Loader:
             "vae_memory_limit_gb": float(vae_memory_limit_gb),
             "cpu_offload": bool(cpu_offload),
         }
+        if "7b" in ckpt_name.lower():
+            config["model_size"] = "7b"
+
         if precision.startswith("fp8-"):
             config["dit_quantized_ckpt"] = str(ckpt_path)
             config["dit_quant_scheme"] = precision
