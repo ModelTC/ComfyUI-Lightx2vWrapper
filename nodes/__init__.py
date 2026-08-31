@@ -7,6 +7,7 @@ Each submodule groups a category of nodes:
 - ``combiner``  : config combiners (V1/V2/V3) that aggregate the above
 - ``inference`` : the modular inference runner
 - ``seedvr``    : SeedVR2 super-resolution runner
+- ``swiftvr``   : SwiftVR restoration runner
 """
 
 from .combiner import (
@@ -22,6 +23,7 @@ from .config import (
 from .inference import LightX2VModularInferenceV2
 from .lora import LightX2VLoRALoader
 from .seedvr import LightX2VOutputVideoPreview, LightX2VSeedVR2Loader, LightX2VSeedVR2Sampler
+from .swiftvr import LightX2VSwiftVRLoader, LightX2VSwiftVRSampler
 from .talk import (
     TalkObjectInput,
     TalkObjectsCombiner,
@@ -40,6 +42,8 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VModularInferenceV2": LightX2VModularInferenceV2,
     "LightX2VSeedVR2Loader": LightX2VSeedVR2Loader,
     "LightX2VSeedVR2Sampler": LightX2VSeedVR2Sampler,
+    "LightX2VSwiftVRLoader": LightX2VSwiftVRLoader,
+    "LightX2VSwiftVRSampler": LightX2VSwiftVRSampler,
     "LightX2VOutputVideoPreview": LightX2VOutputVideoPreview,
     "LightX2VTalkObjectInput": TalkObjectInput,
     "LightX2VTalkObjectsCombiner": TalkObjectsCombiner,
@@ -58,6 +62,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VModularInferenceV2": "LightX2V Modular Inference V2",
     "LightX2VSeedVR2Loader": "LightX2V SeedVR2 Loader",
     "LightX2VSeedVR2Sampler": "LightX2V SeedVR2 Sampler",
+    "LightX2VSwiftVRLoader": "LightX2V SwiftVR Loader",
+    "LightX2VSwiftVRSampler": "LightX2V SwiftVR Sampler",
     "LightX2VOutputVideoPreview": "LightX2V Output Video Preview",
     "LightX2VTalkObjectInput": "LightX2V Talk Object Input (Single)",
     "LightX2VTalkObjectsCombiner": "LightX2V Talk Objects Combiner",
