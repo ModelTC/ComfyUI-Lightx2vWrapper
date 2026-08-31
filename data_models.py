@@ -53,7 +53,7 @@ class InferenceConfig:
     use_31_block: bool = True
 
     # Optional parameters
-    denoising_step_list: Optional[List[int]] = None
+    denoising_step_list: Optional[List[float]] = None
     resize_mode: str = "adaptive"
     fixed_area: str = "720p"
     segment_length: int = 81
@@ -65,6 +65,7 @@ class InferenceConfig:
     negative_prompt: str = ""
     image_path: Optional[str] = None
     audio_path: Optional[str] = None
+    f2v_process: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary, excluding None values."""
