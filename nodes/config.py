@@ -171,13 +171,6 @@ class LightX2VInferenceConfig:
                         "tooltip": "Use lightweight VAE to accelerate decoding",
                     },
                 ),
-                "f2v_process": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                        "tooltip": "Use frame-to-video processing for SekoTalk",
-                    },
-                ),
             },
         }
 
@@ -206,7 +199,6 @@ class LightX2VInferenceConfig:
         segment_length=81,
         prev_frame_length=5,
         use_tiny_vae=False,
-        f2v_process=False,
     ):
         """Create basic inference configuration."""
         builder = InferenceConfigBuilder()
@@ -230,7 +222,6 @@ class LightX2VInferenceConfig:
             segment_length=segment_length,
             prev_frame_length=prev_frame_length,
             use_tiny_vae=use_tiny_vae,
-            f2v_process=f2v_process,
         )
 
         return (config.to_dict(),)

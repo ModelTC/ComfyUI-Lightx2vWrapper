@@ -36,7 +36,6 @@ WRAPPER_TO_LIGHTX2V_FIELDS: Dict[str, str] = {
     "fixed_area": "fixed_area",
     # Sekotalk-specific.
     "prev_frame_length": "prev_frame_length",
-    "f2v_process": "f2v_process",
     # Distillation.
     "denoising_step_list": "denoising_step_list",
     "use_31_block": "use_31_block",

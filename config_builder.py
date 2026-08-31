@@ -153,7 +153,6 @@ class InferenceConfigBuilder:
             "segment_length",
             "prev_frame_length",
             "use_tiny_vae",
-            "f2v_process",
         ]:
             if param in optional_params:
                 setattr(config, param, optional_params[param])
