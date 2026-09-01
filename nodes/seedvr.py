@@ -5,6 +5,8 @@ Split into:
   models/lightx2v/seedvr2/, load it into VRAM, return a SEEDVR_MODEL handle.
 - LightX2VSeedVR2Sampler: takes SEEDVR_MODEL + IMAGE + per-call params,
   returns upscaled IMAGE frames.
+- LightX2VSeedVR2FileSampler: takes a validated input video path and streams
+  the restored result to ComfyUI output while preserving source audio.
 
 The sampler installs a small shim on the runner so input frames come from the
 IMAGE tensor (no temp file, no re-encode); the runner's segmenting logic still
@@ -18,6 +20,7 @@ import math
 import shutil
 import subprocess
 import tempfile
+import threading
 import types
 import wave
 from collections.abc import Mapping
@@ -27,7 +30,11 @@ import folder_paths
 import torch
 from comfy.utils import ProgressBar
 
+from .file_input import probe_video_file, resolve_input_video_path
+
 logger = logging.getLogger(__name__)
+
+_SEEDVR_RUN_LOCK = threading.Lock()
 
 
 def _seedvr2_model_dir() -> Path:
@@ -194,6 +201,8 @@ def _install_tensor_input_shim(runner, frames_u8, fps):
     """
     if not hasattr(runner, "_lightx2v_original_run_input_encoder_local_sr"):
         runner._lightx2v_original_run_input_encoder_local_sr = runner._run_input_encoder_local_sr.__func__
+    if not hasattr(runner, "_lightx2v_original_run_input_encoder"):
+        runner._lightx2v_original_run_input_encoder = runner.run_input_encoder
 
     runner._tensor_input = frames_u8
     runner._tensor_input_fps = float(fps)
@@ -230,6 +239,12 @@ def _clear_tensor_input_shim(runner):
     for attr in ("_tensor_input", "_tensor_input_fps"):
         if hasattr(runner, attr):
             delattr(runner, attr)
+    for attr in ("_probe_video", "_read_video_segment", "_run_input_encoder_local_sr"):
+        if attr in runner.__dict__:
+            delattr(runner, attr)
+    original_run_input_encoder = getattr(runner, "_lightx2v_original_run_input_encoder", None)
+    if original_run_input_encoder is not None:
+        runner.run_input_encoder = original_run_input_encoder
 
 
 class LightX2VSeedVR2Loader:
@@ -543,6 +558,158 @@ class LightX2VSeedVR2Sampler:
         # wan_vae_to_comfy already gives [T, H, W, C] float[0,1] on CPU
         video = video.detach().cpu().float().clamp(0.0, 1.0)
         return (video, "")
+
+
+class LightX2VSeedVR2FileSampler:
+    """Run SeedVR2 on an input video using segmented file I/O."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("SEEDVR_MODEL",),
+                "video_path": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Absolute path produced by LightX2V Input Video Path. The file must remain under ComfyUI input.",
+                    },
+                ),
+                "target_width": ("INT", {"default": 1920, "min": 64, "max": 7680, "step": 8}),
+                "target_height": (
+                    "INT",
+                    {
+                        "default": 1080,
+                        "min": 64,
+                        "max": 4320,
+                        "step": 8,
+                        "tooltip": "Target output frame height.",
+                    },
+                ),
+                "infer_steps": ("INT", {"default": 1, "min": 1, "max": 50}),
+                "segment_length": (
+                    "INT",
+                    {
+                        "default": 81,
+                        "min": 16,
+                        "max": 512,
+                        "step": 1,
+                        "tooltip": "Frames decoded and restored per segment. Long videos do not materialize as a full IMAGE batch.",
+                    },
+                ),
+                "segment_overlap": ("INT", {"default": 1, "min": 0, "max": 32}),
+                "seed": ("INT", {"default": 42, "min": 0, "max": 2**32 - 1}),
+                "filename_prefix": ("STRING", {"default": "lightx2v_seedvr2/SeedVR2"}),
+                "color_fix": (
+                    ["gpu", "off", "cpu"],
+                    {
+                        "default": "gpu",
+                        "tooltip": "SeedVR color correction after VAE decode.",
+                    },
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("filename",)
+    FUNCTION = "sample"
+    CATEGORY = "LightX2V/SeedVR"
+
+    def sample(
+        self,
+        model,
+        video_path,
+        target_height,
+        target_width,
+        infer_steps,
+        segment_length,
+        segment_overlap,
+        seed,
+        filename_prefix,
+        color_fix,
+    ):
+        from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
+
+        input_path = resolve_input_video_path(video_path)
+        source_width, source_height, source_fps = probe_video_file(input_path)
+        effective_fps = source_fps if source_fps > 0 else 16.0
+        source_geom = math.sqrt(source_height * source_width)
+        target_geom = math.sqrt(int(target_height) * int(target_width))
+        sr_ratio = max(target_geom / source_geom, 1.0) if source_geom > 0 else 1.0
+        if target_geom < source_geom:
+            logger.warning(
+                "[SeedVR2FileSampler] target (%sx%s) is smaller than input (%sx%s); SR will run at input scale before final sizing.",
+                target_width,
+                target_height,
+                source_width,
+                source_height,
+            )
+
+        full_path, output_file, output_subfolder = _prepare_output_video(filename_prefix, target_width, target_height)
+        save_path = str(full_path)
+        input_info = init_empty_input_info("sr")
+        update_input_info_from_dict(
+            input_info,
+            {
+                "video_path": str(input_path),
+                "image_path": "",
+                "prompt": "",
+                "negative_prompt": "",
+                "seed": int(seed),
+                "sr_ratio": float(sr_ratio),
+                "save_result_path": save_path,
+                "return_result_tensor": False,
+            },
+        )
+
+        runner = model["runner"]
+        progress = ProgressBar(100)
+        logger.info(
+            "[SeedVR2FileSampler] input=%s (%sx%s @ %.3f fps), target=%sx%s, segment=%s/%s",
+            input_path,
+            source_width,
+            source_height,
+            source_fps,
+            target_width,
+            target_height,
+            segment_length,
+            segment_overlap,
+        )
+        try:
+            with _SEEDVR_RUN_LOCK:
+                _clear_tensor_input_shim(runner)
+                runner.set_config(
+                    {
+                        "sr_ratio": float(sr_ratio),
+                        "target_height": int(target_height),
+                        "target_width": int(target_width),
+                        "target_video_length": int(segment_length),
+                        "sr_segment_length": int(segment_length),
+                        "sr_overlap": int(segment_overlap),
+                        "stream_save_video": True,
+                        "infer_steps": int(infer_steps),
+                        "seed": int(seed),
+                        "fps": float(effective_fps),
+                        "video_path": str(input_path),
+                        "image_path": "",
+                        "prompt": "",
+                        "negative_prompt": "",
+                        "save_result_path": save_path,
+                        "return_result_tensor": False,
+                        "color_fix": str(color_fix),
+                    }
+                )
+                if hasattr(runner, "set_progress_callback"):
+                    runner.set_progress_callback(lambda current, _total: progress.update_absolute(current))
+                runner.run_pipeline(input_info)
+        finally:
+            torch.cuda.empty_cache()
+            gc.collect()
+
+        if not Path(save_path).is_file():
+            raise RuntimeError(f"SeedVR2 did not create expected output video: {save_path}")
+        relative_name = str(Path(output_subfolder) / output_file) if output_subfolder else output_file
+        return (relative_name,)
 
 
 class LightX2VOutputVideoPreview:

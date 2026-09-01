@@ -12,6 +12,7 @@ import folder_paths
 import torch
 from comfy.utils import ProgressBar
 
+from .file_input import probe_video_file, resolve_input_video_path
 from .seedvr import _prepare_output_video
 
 logger = logging.getLogger(__name__)
@@ -430,3 +431,114 @@ class LightX2VSwiftVRSampler:
             return (placeholder, relative_name)
 
         return (memory_writer.as_images().clamp_(0.0, 1.0), "")
+
+
+class LightX2VSwiftVRFileSampler:
+    """Restore an input video from disk without materializing it as IMAGE."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("SWIFTVR_MODEL",),
+                "video_path": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Absolute path produced by LightX2V Input Video Path. The file must remain under ComfyUI input.",
+                    },
+                ),
+                "target_short_edge": (
+                    "INT",
+                    {
+                        "default": 1080,
+                        "min": 64,
+                        "max": _MAX_OUTPUT_DIMENSION,
+                        "step": 8,
+                        "tooltip": "Output short edge. SwiftVR preserves aspect ratio.",
+                    },
+                ),
+                "filename_prefix": ("STRING", {"default": "lightx2v_swiftvr/SwiftVR"}),
+                "video_codec": (["libx265", "libx264"], {"default": "libx265"}),
+                "quality": ("INT", {"default": 60, "min": 0, "max": 100, "step": 1}),
+                "ffmpeg_preset": (
+                    ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"],
+                    {"default": "ultrafast"},
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("filename",)
+    FUNCTION = "sample"
+    CATEGORY = "LightX2V/SwiftVR"
+
+    def sample(self, model, video_path, target_short_edge, filename_prefix, video_codec, quality, ffmpeg_preset):
+        from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
+
+        input_path = resolve_input_video_path(video_path)
+        raw_width, raw_height, source_fps = probe_video_file(input_path)
+        source_height, source_width = raw_height // 8 * 8, raw_width // 8 * 8
+        if source_height <= 0 or source_width <= 0:
+            raise ValueError(f"SwiftVR input is too small after 8-pixel alignment: {raw_height}x{raw_width}")
+
+        output_height, output_width, sr_ratio = _resolve_output_size(
+            source_width,
+            source_height,
+            target_short_edge,
+            require_even=True,
+        )
+        full_path, output_file, output_subfolder = _prepare_output_video(filename_prefix, output_width, output_height)
+        save_path = str(full_path)
+        target_shape = [output_height, output_width]
+
+        input_info = init_empty_input_info("sr")
+        update_input_info_from_dict(
+            input_info,
+            {
+                "video_path": str(input_path),
+                "image_path": "",
+                "sr_ratio": float(sr_ratio),
+                "target_shape": target_shape,
+                "save_result_path": save_path,
+                "return_result_tensor": False,
+            },
+        )
+
+        runner = model["runner"]
+        progress = ProgressBar(100)
+        logger.info(
+            "[SwiftVRFileSampler] input=%s (%sx%s @ %.3f fps), output=%sx%s",
+            input_path,
+            source_width,
+            source_height,
+            source_fps,
+            output_width,
+            output_height,
+        )
+        try:
+            with _SWIFTVR_RUN_LOCK:
+                runner.set_config(
+                    {
+                        "fps": 0.0,
+                        "video_codec": str(video_codec),
+                        "quality": int(quality),
+                        "ffmpeg_preset": str(ffmpeg_preset),
+                        "video_path": str(input_path),
+                        "image_path": "",
+                        "sr_ratio": float(sr_ratio),
+                        "target_shape": target_shape,
+                        "return_result_tensor": False,
+                    }
+                )
+                if hasattr(runner, "set_progress_callback"):
+                    runner.set_progress_callback(lambda current, _total: progress.update_absolute(current))
+                runner.run_pipeline(input_info)
+        finally:
+            torch.cuda.empty_cache()
+            gc.collect()
+
+        if not Path(save_path).is_file():
+            raise RuntimeError(f"SwiftVR did not create expected output video: {save_path}")
+        relative_name = str(Path(output_subfolder) / output_file) if output_subfolder else output_file
+        return (relative_name,)
