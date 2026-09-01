@@ -1,0 +1,205 @@
+{
+  "id": "9c99a548-579c-497a-82d0-ded65496927b",
+  "revision": 0,
+  "last_node_id": 4,
+  "last_link_id": 6,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [
+        -168.5590531329889,
+        -43.34150113146973
+      ],
+      "size": [
+        282.796875,
+        364
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "sign_name.jpg",
+        "image"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LightX2VSwiftVRLoader",
+      "pos": [
+        -185.95492085854562,
+        362
+      ],
+      "size": [
+        560.40625,
+        308.234375
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "SWIFTVR_MODEL",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VSwiftVRLoader"
+      },
+      "widgets_values": [
+        "SwiftVR_lightx2v",
+        "flash_attn3",
+        "flashinfer_rope",
+        24,
+        0,
+        0,
+        false
+      ]
+    },
+    {
+      "id": 3,
+      "type": "LightX2VSwiftVRSampler",
+      "pos": [
+        428.4034139883438,
+        68.58151792839192
+      ],
+      "size": [
+        399.609375,
+        473.265625
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "SWIFTVR_MODEL",
+          "link": 4
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            6
+          ]
+        },
+        {
+          "name": "filename",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VSwiftVRSampler"
+      },
+      "widgets_values": [
+        1080,
+        16,
+        true,
+        "lightx2v_swiftvr_api/SwiftVRImage",
+        "libx264",
+        90,
+        "ultrafast"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "PreviewImage",
+      "pos": [
+        895.4953696545064,
+        76.70654845736883
+      ],
+      "size": [
+        354.15625,
+        375.734375
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 6
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      4,
+      2,
+      0,
+      3,
+      0,
+      "SWIFTVR_MODEL"
+    ],
+    [
+      5,
+      1,
+      0,
+      3,
+      1,
+      "IMAGE"
+    ],
+    [
+      6,
+      3,
+      0,
+      4,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9307738921015128,
+      "offset": [
+        645.6355492983848,
+        379.57724180337755
+      ]
+    },
+    "frontendVersion": "1.45.15",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

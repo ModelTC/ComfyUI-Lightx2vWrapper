@@ -1,0 +1,380 @@
+{
+  "id": "2ac26f51-8427-4fd5-a63b-8c0c35716909",
+  "revision": 0,
+  "last_node_id": 6,
+  "last_link_id": 10,
+  "nodes": [
+    {
+      "id": 2,
+      "type": "LightX2VSwiftVRLoader",
+      "pos": [
+        57.786008992636425,
+        120.61016525792084
+      ],
+      "size": [
+        293.84375,
+        292
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "SWIFTVR_MODEL",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VSwiftVRLoader"
+      },
+      "widgets_values": [
+        "SwiftVR_lightx2v",
+        "flash_attn3",
+        "flashinfer_rope",
+        24,
+        0,
+        0,
+        false
+      ]
+    },
+    {
+      "id": 3,
+      "type": "LightX2VSwiftVRSampler",
+      "pos": [
+        410.84880341840596,
+        119.34257282956952
+      ],
+      "size": [
+        337.3125,
+        320
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "SWIFTVR_MODEL",
+          "link": 4
+        },
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 7
+        },
+        {
+          "name": "source_fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "source_fps"
+          },
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "filename",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VSwiftVRSampler"
+      },
+      "widgets_values": [
+        1080,
+        16,
+        true,
+        "lightx2v_swiftvr_api/SwiftVR",
+        "libx265",
+        60,
+        "ultrafast"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "LightX2VOutputVideoPreview",
+      "pos": [
+        803.9540069651823,
+        143.39082786445536
+      ],
+      "size": [
+        307.875,
+        703.328125
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "filename",
+          "type": "STRING",
+          "link": 6
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "filename",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VOutputVideoPreview"
+      },
+      "widgets_values": [
+        true,
+        true
+      ]
+    },
+    {
+      "id": 5,
+      "type": "VHS_LoadVideo",
+      "pos": [
+        -554.2465629475984,
+        172.59098534531842
+      ],
+      "size": [
+        260.421875,
+        761.6875
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "video_info",
+          "type": "VHS_VIDEOINFO",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_LoadVideo"
+      },
+      "widgets_values": {
+        "video": "飞书20260721-124954.mp4",
+        "force_rate": 0,
+        "custom_width": 0,
+        "custom_height": 0,
+        "frame_load_cap": 0,
+        "skip_first_frames": 0,
+        "select_every_nth": 1,
+        "format": "AnimateDiff",
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "飞书20260721-124954.mp4",
+            "type": "input",
+            "format": "video/mp4",
+            "force_rate": 0,
+            "custom_width": 0,
+            "custom_height": 0,
+            "frame_load_cap": 0,
+            "skip_first_frames": 0,
+            "select_every_nth": 1
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "VHS_VideoInfo",
+      "pos": [
+        -245.90446161258,
+        309.43756146966683
+      ],
+      "size": [
+        233.453125,
+        288
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_info",
+          "type": "VHS_VIDEOINFO",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "source_fps🟨",
+          "type": "FLOAT",
+          "links": [
+            9
+          ]
+        },
+        {
+          "name": "source_frame_count🟨",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "source_duration🟨",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "source_width🟨",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "source_height🟨",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "loaded_fps🟦",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "loaded_frame_count🟦",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "loaded_duration🟦",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "loaded_width🟦",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "loaded_height🟦",
+          "type": "INT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoInfo"
+      },
+      "widgets_values": {}
+    }
+  ],
+  "links": [
+    [
+      4,
+      2,
+      0,
+      3,
+      0,
+      "SWIFTVR_MODEL"
+    ],
+    [
+      6,
+      3,
+      1,
+      4,
+      0,
+      "STRING"
+    ],
+    [
+      7,
+      5,
+      0,
+      3,
+      1,
+      "IMAGE"
+    ],
+    [
+      8,
+      5,
+      3,
+      6,
+      0,
+      "VHS_VIDEOINFO"
+    ],
+    [
+      9,
+      6,
+      0,
+      3,
+      2,
+      "FLOAT"
+    ],
+    [
+      10,
+      5,
+      2,
+      4,
+      1,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8400831511043174,
+      "offset": [
+        766.3547310556437,
+        389.36680475087843
+      ]
+    },
+    "frontendVersion": "1.45.15",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
