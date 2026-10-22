@@ -76,5 +76,4 @@ class LightX2VDefaultConfig:
         "audio_sr": 16000,
         "talk_objects": None,
         "boundary_step_index": 2,
-        "rope_type": "torch",
     }

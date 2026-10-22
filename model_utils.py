@@ -30,19 +30,27 @@ def scan_models() -> List[str]:
 
 
 def support_model_cls_list() -> List[str]:
+    """Return model classes understood by the bundled LightX2V revision.
+
+    The retired ``*_distill`` entries are kept as compatibility aliases for saved
+    ComfyUI workflows.  The current LightX2V runner registry uses the base Wan
+    class plus ``distill_method`` instead; ``bridge.translator.inference``
+    canonicalizes those aliases before the runner is built.
+    """
     return [
         "wan2.1",
-        "wan2.1_distill",
         "wan2.1_vace",
-        "cogvideox",
         "seko_talk",
+        "seko_talk_ar",
         "wan2.2_moe",
         "wan2.2",
-        "wan2.2_moe_audio",
-        "wan2.2_audio",
-        "wan2.2_moe_distill",
+        "wan2.2_s2v",
         "qwen_image",
         "seedvr2",
+        # Legacy workflow values; normalized before build_runner().
+        "wan2.1_distill",
+        "wan2.1_mean_flow_distill",
+        "wan2.2_moe_distill",
     ]
 
 
