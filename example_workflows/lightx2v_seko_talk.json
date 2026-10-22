@@ -1,7 +1,7 @@
 {
   "11": {
     "inputs": {
-      "audio": "12秒.mp3",
+      "audio": "audio_full_female_10s.wav",
       "start_time": 0,
       "duration": 0
     },
@@ -25,6 +25,14 @@
       "audio": [
         "11",
         0
+      ],
+      "memory_config": [
+        "16",
+        0
+      ],
+      "quantization_config": [
+        "17",
+        0
       ]
     },
     "class_type": "LightX2VConfigCombinerV2",
@@ -35,7 +43,7 @@
   "14": {
     "inputs": {
       "model_cls": "seko_talk",
-      "model_name": "SekoTalk-v2.7_beta2-bf16-step4_temp",
+      "model_name": "SekoTalk-v2.7-fp8-step4-xt-490",
       "task": "rs2v",
       "infer_steps": 4,
       "seed": 4221706066,
@@ -70,23 +78,54 @@
       "title": "LightX2V Modular Inference V2"
     }
   },
+  "16": {
+    "inputs": {
+      "enable_rotary_chunk": false,
+      "rotary_chunk_size": 100,
+      "clean_cuda_cache": true,
+      "cpu_offload": true,
+      "offload_granularity": "block",
+      "offload_ratio": 1.0,
+      "t5_cpu_offload": true,
+      "t5_offload_granularity": "model",
+      "audio_encoder_cpu_offload": true,
+      "audio_adapter_cpu_offload": true,
+      "vae_cpu_offload": true,
+      "use_tiling_vae": true,
+      "lazy_load": false,
+      "unload_after_inference": false
+    },
+    "class_type": "LightX2VMemoryOptimization",
+    "_meta": {
+      "title": "LightX2V Memory Optimization"
+    }
+  },
+  "17": {
+    "inputs": {
+      "dit_quant_scheme": "fp8-sgl",
+      "t5_quant_scheme": "fp8-sgl",
+      "clip_quant_scheme": "fp8-sgl",
+      "adapter_quant_scheme": "fp8-sgl"
+    },
+    "class_type": "LightX2VQuantization",
+    "_meta": {
+      "title": "LightX2V Quantization"
+    }
+  },
   "18": {
     "inputs": {
-      "frame_rate": [
-        "22",
-        0
-      ],
+      "frame_rate": 16,
       "loop_count": 0,
-      "filename_prefix": "vigen-15ebb023",
+      "filename_prefix": "lightx2v_sekotalk/single",
       "format": "video/h264-mp4",
       "pix_fmt": "yuv420p",
-      "crf": 23,
+      "crf": 19,
       "save_metadata": false,
       "trim_to_audio": false,
       "pingpong": false,
-      "save_output": false,
+      "save_output": true,
       "images": [
-        "21",
+        "15",
         0
       ],
       "audio": [
@@ -101,41 +140,11 @@
   },
   "20": {
     "inputs": {
-      "image": "00000.jpg"
+      "image": "codex_image_20260922_135831_1323a530_B.jpg"
     },
     "class_type": "LoadImage",
     "_meta": {
       "title": "Load Image"
-    }
-  },
-  "21": {
-    "inputs": {
-      "source_fps": 16,
-      "target_fps": [
-        "22",
-        0
-      ],
-      "scale": 1,
-      "model_name": "flownet.pkl",
-      "batch_size": 8,
-      "use_fp16": true,
-      "images": [
-        "15",
-        0
-      ]
-    },
-    "class_type": "RIFEInterpolation",
-    "_meta": {
-      "title": "RIFE Frame Interpolation"
-    }
-  },
-  "22": {
-    "inputs": {
-      "value": 25.000000000000007
-    },
-    "class_type": "FloatConstant",
-    "_meta": {
-      "title": "target fps"
     }
   }
 }
