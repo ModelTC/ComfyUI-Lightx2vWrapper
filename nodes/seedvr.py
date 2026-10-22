@@ -13,7 +13,6 @@ IMAGE tensor (no temp file, no re-encode); the runner's segmenting logic still
 runs and slices our in-memory tensor.
 """
 
-import argparse
 import gc
 import logging
 import math
@@ -30,6 +29,7 @@ import folder_paths
 import torch
 from comfy.utils import ProgressBar
 
+from ._lightx2v_runner import build_runner, run_request
 from .file_input import probe_video_file, resolve_input_video_path
 
 logger = logging.getLogger(__name__)
@@ -209,7 +209,7 @@ def _install_tensor_input_shim(runner, frames_u8, fps):
 
     def _probe_video(self, video_path):  # noqa: ARG001
         total = self._tensor_input.shape[0]
-        self._set_output_fps(self._tensor_input_fps)
+        self.set_output_fps(self._tensor_input_fps)
         return total, self._tensor_input_fps, None
 
     def _read_video_segment(self, video_path, start_idx, end_idx):  # noqa: ARG001
@@ -330,9 +330,6 @@ class LightX2VSeedVR2Loader:
         vae_causal_slice_size,
         vae_memory_limit_gb,
     ):
-        from ..lightx2v.lightx2v.infer import init_runner
-        from ..lightx2v.lightx2v.utils.set_config import set_config
-
         model_dir = _seedvr2_model_dir()
         if ckpt_name == "None":
             raise FileNotFoundError(f"No .safetensors checkpoints found in {model_dir}")
@@ -376,8 +373,7 @@ class LightX2VSeedVR2Loader:
         else:
             config["dit_original_ckpt"] = str(ckpt_path)
 
-        formatted = set_config(argparse.Namespace(**config))
-        runner = init_runner(formatted)
+        runner = build_runner(config)
         logger.info(
             "[SeedVR2Loader] loaded %s (%s); cpu_offload=%s, tile_vae=%s, tile=%s, overlap=%s, slice=%s, mem_limit=%sGiB",
             ckpt_name,
@@ -467,9 +463,10 @@ class LightX2VSeedVR2Sampler:
         filename_prefix,
         color_fix,
     ):
-        from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
-
         runner = model["runner"]
+
+        if int(infer_steps) != 1:
+            raise ValueError("SeedVR2 requires infer_steps=1")
 
         if images.dim() != 4 or images.shape[-1] not in (3, 4):
             raise ValueError(f"Expected IMAGE [T, H, W, C], got shape {tuple(images.shape)}")
@@ -496,49 +493,31 @@ class LightX2VSeedVR2Sampler:
             full_path, output_file, output_subfolder = _prepare_output_video(filename_prefix, target_width, target_height)
             save_path = str(full_path)
 
-        # runner.config is a LockableDict (locked after init); set_config uses temporarily_unlocked.
-        runner.set_config(
-            {
-                "sr_ratio": float(sr_ratio),
-                "target_height": int(target_height),
-                "target_width": int(target_width),
-                "target_video_length": int(segment_length),  # vestigial for SR; keep aligned with segment_length
-                "sr_segment_length": int(segment_length),
-                "sr_overlap": int(segment_overlap),
-                "infer_steps": int(infer_steps),
-                "seed": int(seed),
-                "fps": float(source_fps),
-                "video_path": "<tensor>",  # truthy sentinel so segmenting logic runs; shim bypasses file I/O
-                "image_path": "",
-                "prompt": "",
-                "negative_prompt": "",
-                "save_result_path": save_path,
-                "return_result_tensor": not bool(save_to_output_file),
-                "color_fix": str(color_fix),
-            }
-        )
-
-        input_info = init_empty_input_info("sr")
-        update_input_info_from_dict(
-            input_info,
-            {
-                "video_path": "<tensor>",
-                "image_path": "",
-                "prompt": "",
-                "negative_prompt": "",
-                "seed": int(seed),
-                "sr_ratio": float(sr_ratio),
-                "save_result_path": save_path,
-                "return_result_tensor": not bool(save_to_output_file),
-            },
-        )
+        request = {
+            "task": "sr",
+            "video_path": "<tensor>",
+            "image_path": "",
+            "size": [int(target_height), int(target_width)],
+            "seed": int(seed),
+            "sr_ratio": float(sr_ratio),
+            "save_result_path": save_path,
+            "return_result_tensor": not bool(save_to_output_file),
+        }
+        runtime_config = {
+            "sr_segment_length": int(segment_length),
+            "sr_overlap": int(segment_overlap),
+            "fps": float(source_fps),
+            "color_fix": str(color_fix),
+            "stream_save_video": bool(save_to_output_file),
+        }
 
         progress = ProgressBar(100)
         if hasattr(runner, "set_progress_callback"):
             runner.set_progress_callback(lambda cur, _tot: progress.update_absolute(cur))
 
         try:
-            result = runner.run_pipeline(input_info)
+            with _SEEDVR_RUN_LOCK:
+                result = run_request(runner, request, runtime_config=runtime_config)
         finally:
             _clear_tensor_input_shim(runner)
             torch.cuda.empty_cache()
@@ -628,8 +607,6 @@ class LightX2VSeedVR2FileSampler:
         filename_prefix,
         color_fix,
     ):
-        from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
-
         input_path = resolve_input_video_path(video_path)
         source_width, source_height, source_fps = probe_video_file(input_path)
         effective_fps = source_fps if source_fps > 0 else 16.0
@@ -647,20 +624,25 @@ class LightX2VSeedVR2FileSampler:
 
         full_path, output_file, output_subfolder = _prepare_output_video(filename_prefix, target_width, target_height)
         save_path = str(full_path)
-        input_info = init_empty_input_info("sr")
-        update_input_info_from_dict(
-            input_info,
-            {
-                "video_path": str(input_path),
-                "image_path": "",
-                "prompt": "",
-                "negative_prompt": "",
-                "seed": int(seed),
-                "sr_ratio": float(sr_ratio),
-                "save_result_path": save_path,
-                "return_result_tensor": False,
-            },
-        )
+        if int(infer_steps) != 1:
+            raise ValueError("SeedVR2 requires infer_steps=1")
+        request = {
+            "task": "sr",
+            "video_path": str(input_path),
+            "image_path": "",
+            "size": [int(target_height), int(target_width)],
+            "seed": int(seed),
+            "sr_ratio": float(sr_ratio),
+            "save_result_path": save_path,
+            "return_result_tensor": False,
+        }
+        runtime_config = {
+            "sr_segment_length": int(segment_length),
+            "sr_overlap": int(segment_overlap),
+            "stream_save_video": True,
+            "fps": float(effective_fps),
+            "color_fix": str(color_fix),
+        }
 
         runner = model["runner"]
         progress = ProgressBar(100)
@@ -677,31 +659,9 @@ class LightX2VSeedVR2FileSampler:
         )
         try:
             with _SEEDVR_RUN_LOCK:
-                _clear_tensor_input_shim(runner)
-                runner.set_config(
-                    {
-                        "sr_ratio": float(sr_ratio),
-                        "target_height": int(target_height),
-                        "target_width": int(target_width),
-                        "target_video_length": int(segment_length),
-                        "sr_segment_length": int(segment_length),
-                        "sr_overlap": int(segment_overlap),
-                        "stream_save_video": True,
-                        "infer_steps": int(infer_steps),
-                        "seed": int(seed),
-                        "fps": float(effective_fps),
-                        "video_path": str(input_path),
-                        "image_path": "",
-                        "prompt": "",
-                        "negative_prompt": "",
-                        "save_result_path": save_path,
-                        "return_result_tensor": False,
-                        "color_fix": str(color_fix),
-                    }
-                )
                 if hasattr(runner, "set_progress_callback"):
                     runner.set_progress_callback(lambda current, _total: progress.update_absolute(current))
-                runner.run_pipeline(input_info)
+                run_request(runner, request, runtime_config=runtime_config)
         finally:
             torch.cuda.empty_cache()
             gc.collect()

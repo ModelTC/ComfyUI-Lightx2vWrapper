@@ -1,6 +1,5 @@
 """SwiftVR restoration nodes for ComfyUI."""
 
-import argparse
 import gc
 import logging
 import tempfile
@@ -12,6 +11,7 @@ import folder_paths
 import torch
 from comfy.utils import ProgressBar
 
+from ._lightx2v_runner import build_runner, run_request
 from .file_input import probe_video_file, resolve_input_video_path
 from .seedvr import _prepare_output_video
 
@@ -189,9 +189,6 @@ class LightX2VSwiftVRLoader:
     CATEGORY = "LightX2V/SwiftVR"
 
     def load(self, model_name, attention_backend, rope_type, clip_length, dit_overlap, reae_frame_batch_size, use_compile):
-        from ..lightx2v.lightx2v.infer import init_runner
-        from ..lightx2v.lightx2v.utils.set_config import set_config
-
         model_path = _swiftvr_model_root() / model_name
         if model_name == "None" or not _is_swiftvr_model(model_path):
             missing = [str(model_path / relative_path) for relative_path in _REQUIRED_MODEL_FILES if not (model_path / relative_path).is_file()]
@@ -218,7 +215,7 @@ class LightX2VSwiftVRLoader:
             "parallel": False,
             "use_compile": bool(use_compile),
         }
-        runner = init_runner(set_config(argparse.Namespace(**config)))
+        runner = build_runner(config)
         logger.info(
             "[SwiftVRLoader] loaded %s; attention=%s, rope=%s, clip=%s, overlap=%s, reae_batch=%s, compile=%s",
             model_name,
@@ -288,8 +285,6 @@ class LightX2VSwiftVRSampler:
     ):
         from lightx2v.models.runners.swiftvr import swiftvr_runner as swiftvr_module
 
-        from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
-
         if images.dim() != 4 or images.shape[-1] not in (3, 4):
             raise ValueError(f"Expected IMAGE [T, H, W, C], got shape {tuple(images.shape)}")
         if images.shape[0] < 1:
@@ -308,7 +303,7 @@ class LightX2VSwiftVRSampler:
             target_short_edge,
             require_even=not is_image,
         )
-        target_shape = [output_height, output_width]
+        target_size = [output_height, output_width]
         logger.info(
             "[SwiftVRSampler] aligned input=%sx%s, target_short_edge=%s, output=%sx%s, scale=%.4f",
             source_width,
@@ -340,18 +335,21 @@ class LightX2VSwiftVRSampler:
         video_path = "" if is_image else "<tensor>"
         return_result_tensor = is_image
 
-        input_info = init_empty_input_info("sr")
-        update_input_info_from_dict(
-            input_info,
-            {
-                "video_path": video_path,
-                "image_path": image_path,
-                "sr_ratio": float(sr_ratio),
-                "target_shape": target_shape,
-                "save_result_path": save_path,
-                "return_result_tensor": return_result_tensor,
-            },
-        )
+        request = {
+            "task": "sr",
+            "video_path": video_path,
+            "image_path": image_path,
+            "sr_ratio": float(sr_ratio),
+            "size": target_size,
+            "save_result_path": save_path,
+            "return_result_tensor": return_result_tensor,
+        }
+        runtime_config = {
+            "fps": float(source_fps),
+            "video_codec": str(video_codec),
+            "quality": int(quality),
+            "ffmpeg_preset": str(ffmpeg_preset),
+        }
 
         progress = ProgressBar(100)
         restored_images = None
@@ -364,19 +362,6 @@ class LightX2VSwiftVRSampler:
                 had_instance_image_reader = "read_image_frame" in runner.__dict__
                 original_instance_image_reader = runner.__dict__.get("read_image_frame")
                 try:
-                    runner.set_config(
-                        {
-                            "fps": float(source_fps),
-                            "video_codec": str(video_codec),
-                            "quality": int(quality),
-                            "ffmpeg_preset": str(ffmpeg_preset),
-                            "video_path": video_path,
-                            "image_path": image_path,
-                            "sr_ratio": float(sr_ratio),
-                            "target_shape": target_shape,
-                            "return_result_tensor": return_result_tensor,
-                        }
-                    )
                     if hasattr(runner, "set_progress_callback"):
                         runner.set_progress_callback(lambda current, _total: progress.update_absolute(current))
                     if is_image:
@@ -390,7 +375,7 @@ class LightX2VSwiftVRSampler:
                         swiftvr_module.mux_audio_from_video = lambda *_args, **_kwargs: None
                     if not is_image and memory_writer is not None:
                         runner.open_video_writer = types.MethodType(lambda _runner, _path, _fps: memory_writer, runner)
-                    result = runner.run_pipeline(input_info)
+                    result = run_request(runner, request, runtime_config=runtime_config)
                     if is_image:
                         restored_images = result.get("images") if isinstance(result, dict) else result
                 finally:
@@ -474,8 +459,6 @@ class LightX2VSwiftVRFileSampler:
     CATEGORY = "LightX2V/SwiftVR"
 
     def sample(self, model, video_path, target_short_edge, filename_prefix, video_codec, quality, ffmpeg_preset):
-        from ..lightx2v.lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
-
         input_path = resolve_input_video_path(video_path)
         raw_width, raw_height, source_fps = probe_video_file(input_path)
         source_height, source_width = raw_height // 8 * 8, raw_width // 8 * 8
@@ -490,20 +473,21 @@ class LightX2VSwiftVRFileSampler:
         )
         full_path, output_file, output_subfolder = _prepare_output_video(filename_prefix, output_width, output_height)
         save_path = str(full_path)
-        target_shape = [output_height, output_width]
-
-        input_info = init_empty_input_info("sr")
-        update_input_info_from_dict(
-            input_info,
-            {
-                "video_path": str(input_path),
-                "image_path": "",
-                "sr_ratio": float(sr_ratio),
-                "target_shape": target_shape,
-                "save_result_path": save_path,
-                "return_result_tensor": False,
-            },
-        )
+        request = {
+            "task": "sr",
+            "video_path": str(input_path),
+            "image_path": "",
+            "sr_ratio": float(sr_ratio),
+            "size": [output_height, output_width],
+            "save_result_path": save_path,
+            "return_result_tensor": False,
+        }
+        runtime_config = {
+            "fps": 0.0,
+            "video_codec": str(video_codec),
+            "quality": int(quality),
+            "ffmpeg_preset": str(ffmpeg_preset),
+        }
 
         runner = model["runner"]
         progress = ProgressBar(100)
@@ -518,22 +502,9 @@ class LightX2VSwiftVRFileSampler:
         )
         try:
             with _SWIFTVR_RUN_LOCK:
-                runner.set_config(
-                    {
-                        "fps": 0.0,
-                        "video_codec": str(video_codec),
-                        "quality": int(quality),
-                        "ffmpeg_preset": str(ffmpeg_preset),
-                        "video_path": str(input_path),
-                        "image_path": "",
-                        "sr_ratio": float(sr_ratio),
-                        "target_shape": target_shape,
-                        "return_result_tensor": False,
-                    }
-                )
                 if hasattr(runner, "set_progress_callback"):
                     runner.set_progress_callback(lambda current, _total: progress.update_absolute(current))
-                runner.run_pipeline(input_info)
+                run_request(runner, request, runtime_config=runtime_config)
         finally:
             torch.cuda.empty_cache()
             gc.collect()
