@@ -100,9 +100,7 @@ class LightX2VModularInferenceV2:
                     int(config.get("target_height", config.get("height", 480))),
                     int(config.get("target_width", config.get("width", 832))),
                 ]
-                startup_data["num_frames"] = int(
-                    config.get("target_video_length", config.get("video_length", config.get("num_frames", 81)))
-                )
+                startup_data["num_frames"] = int(config.get("target_video_length", config.get("video_length", config.get("num_frames", 81))))
                 formatted = _modern_build_startup_config(startup_data)
             else:
                 # set_args2config strips any key that's part of an InputInfo
@@ -143,9 +141,7 @@ class LightX2VModularInferenceV2:
             int(config.get("target_height", config.get("height", 480))),
             int(config.get("target_width", config.get("width", 832))),
         ]
-        startup_data["num_frames"] = int(
-            config.get("target_video_length", config.get("video_length", config.get("num_frames", 81)))
-        )
+        startup_data["num_frames"] = int(config.get("target_video_length", config.get("video_length", config.get("num_frames", 81))))
         return _modern_build_startup_config(startup_data)
 
     @staticmethod
@@ -168,9 +164,7 @@ class LightX2VModularInferenceV2:
                     int(config.get("target_width", config.get("width", 832))),
                 ]
             elif field == "num_frames":
-                request[field] = int(
-                    config.get("target_video_length", config.get("video_length", config.get("num_frames", 81)))
-                )
+                request[field] = int(config.get("target_video_length", config.get("video_length", config.get("num_frames", 81))))
             elif field in config:
                 request[field] = config[field]
 
@@ -183,6 +177,14 @@ class LightX2VModularInferenceV2:
         """Run inference with prepared configuration."""
 
         config = prepared_config
+        from ._image_shim import install_on_runner_tree as _install_image_shim
+        from ._image_shim import is_sentinel as _is_image_sentinel
+        from ._image_shim import release as _release_image_sentinel
+
+        _image_sentinel = config.get("image_path") if isinstance(config, dict) else getattr(config, "image_path", None)
+        if not _is_image_sentinel(_image_sentinel):
+            _image_sentinel = None
+
         # Combiner may have stashed the input AUDIO in the in-memory shim and
         # set audio_path to a sentinel — release it on exit so the tensor isn't
         # retained across runs (one ComfyUI graph tick = one sentinel).
@@ -199,7 +201,7 @@ class LightX2VModularInferenceV2:
             current_runner = getattr(self.__class__, "_current_runner", None)
             current_config_hash = getattr(self.__class__, "_current_config_hash", None)
 
-            needs_reinit = current_runner is None or current_config_hash != config_hash or getattr(config, "lazy_load", False)
+            needs_reinit = current_runner is None or current_config_hash != config_hash or config.get("lazy_load", False)
 
             logging.info(f"Needs reinit: {needs_reinit}, old config hash: {current_config_hash}, new config hash: {config_hash}")
             if needs_reinit:
@@ -240,6 +242,10 @@ class LightX2VModularInferenceV2:
 
             current_runner = self.__class__._current_runner
 
+            if _image_sentinel is not None:
+                if _install_image_shim(current_runner) == 0:
+                    raise RuntimeError("LightX2V IMAGE input shim could not find a runner image reader")
+
             if hasattr(current_runner, "set_progress_callback"):
                 current_runner.set_progress_callback(update_progress)
 
@@ -279,7 +285,7 @@ class LightX2VModularInferenceV2:
                 if images.dtype != torch.float32:
                     images = images.float()
 
-            if getattr(config, "unload_after_inference", False):
+            if config.get("unload_after_inference", False):
                 current_runner = None  # drop local ref so __del__ can run
                 self._release_runner()
             else:
@@ -292,5 +298,7 @@ class LightX2VModularInferenceV2:
             logging.error(f"Error during inference: {e}")
             raise
         finally:
+            if _image_sentinel is not None:
+                _release_image_sentinel(_image_sentinel)
             if _audio_sentinel is not None:
                 _release_audio_sentinel(_audio_sentinel)

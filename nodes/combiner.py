@@ -168,19 +168,24 @@ class _BaseConfigCombiner:
         if image is None:
             raise ValueError("i2v or s2v or rs2v task requires input image")
 
-        image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
-        pil_image = Image.fromarray(image_np)
-        temp_path = self.temp_manager.create_temp_file(suffix=".png")
-        pil_image.save(temp_path)
-        config.image_path = temp_path
-        logging.info(f"Image saved to {temp_path}")
+        frame_count = int(image.shape[0]) if hasattr(image, "shape") and image.ndim > 0 else 0
+        if frame_count > 1:
+            logging.warning(
+                "LightX2V uses only the first IMAGE frame as the reference; received %s frames",
+                frame_count,
+            )
+
+        from ._image_shim import register
+
+        config.image_path = register(image)
+        logging.info("Routed ComfyUI IMAGE through the in-memory shim")
 
     def _save_single_audio_if_needed(self, config, audio):
         # Route ComfyUI AUDIO straight into the runner via the in-memory shim
         # (no WAV temp file, no soundfile round-trip). The shim only intercepts
         # this single-AUDIO path; V3 multi-talker padding still produces real
         # files since its inputs are external paths/URLs, not ComfyUI tensors.
-        if audio is None or not hasattr(config, "model_cls") or "seko" not in config.model_cls:
+        if audio is None or config.task not in {"s2v", "rs2v"}:
             return
         from ._audio_shim import comfyui_audio_to_loader_pair, install, register
 

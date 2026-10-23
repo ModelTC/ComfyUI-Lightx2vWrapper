@@ -81,10 +81,7 @@ def _resolve_output_size(source_width: int, source_height: int, target_short_edg
 
     scale = target_short_edge / source_short_edge
     if scale > _MAX_SR_RATIO:
-        raise ValueError(
-            f"SwiftVR scale {scale:.3f}x exceeds the supported maximum {_MAX_SR_RATIO:.1f}x; "
-            f"lower target_short_edge"
-        )
+        raise ValueError(f"SwiftVR scale {scale:.3f}x exceeds the supported maximum {_MAX_SR_RATIO:.1f}x; lower target_short_edge")
     if source_width <= source_height:
         output_width = target_short_edge
         output_height = int(round(source_height * scale))
@@ -97,8 +94,7 @@ def _resolve_output_size(source_width: int, source_height: int, target_short_edg
         output_height = max(2, (output_height + 1) // 2 * 2)
     if max(output_width, output_height) > _MAX_OUTPUT_DIMENSION:
         raise ValueError(
-            f"SwiftVR output {output_width}x{output_height} exceeds the maximum supported dimension "
-            f"{_MAX_OUTPUT_DIMENSION}; lower target_short_edge"
+            f"SwiftVR output {output_width}x{output_height} exceeds the maximum supported dimension {_MAX_OUTPUT_DIMENSION}; lower target_short_edge"
         )
     return output_height, output_width, scale
 

@@ -701,7 +701,7 @@ class LightX2VOutputVideoPreview:
                     "AUDIO",
                     {"tooltip": "Optional audio from Load Video/Get Video Components to merge into the output MP4."},
                 ),
-            }
+            },
         }
 
     RETURN_TYPES = ("STRING",)
