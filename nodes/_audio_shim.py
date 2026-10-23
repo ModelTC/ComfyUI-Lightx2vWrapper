@@ -41,6 +41,17 @@ _PATCH_SITES = (
 )
 
 
+class _AudioSentinel(str):
+    """A path-shaped token that releases its registry lease when discarded."""
+
+    def __del__(self):
+        try:
+            release(str(self))
+        except Exception:
+            # Destructors can run during interpreter shutdown.
+            pass
+
+
 def register(waveform: torch.Tensor, sample_rate: int) -> str:
     """Register a [C, T] float32 waveform; return a sentinel "path" for it."""
     if waveform.dim() != 2:
@@ -50,12 +61,12 @@ def register(waveform: torch.Tensor, sample_rate: int) -> str:
     stashed = waveform.detach().to(torch.float32).cpu().contiguous()
     with _LOCK:
         _REGISTRY[sentinel] = (stashed, int(sample_rate))
-    return sentinel
+    return _AudioSentinel(sentinel)
 
 
 def release(sentinel: str) -> None:
     with _LOCK:
-        _REGISTRY.pop(sentinel, None)
+        _REGISTRY.pop(str(sentinel), None)
 
 
 def is_sentinel(path) -> bool:

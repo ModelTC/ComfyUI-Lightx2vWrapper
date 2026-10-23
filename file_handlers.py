@@ -142,34 +142,6 @@ class AudioFileHandler(FileHandler):
 
         return waveform
 
-    def _save_with_wave(self, path: str, waveform: np.ndarray, sample_rate: int):
-        """Save audio using wave module."""
-        import wave
-
-        with wave.open(path, "wb") as wav_file:
-            wav_file.setnchannels(1 if waveform.ndim == 1 else waveform.shape[-1])
-            wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(sample_rate)
-
-            if waveform.dtype != np.int16:
-                waveform = (waveform * 32767).astype(np.int16)
-
-            wav_file.writeframes(waveform.tobytes())
-
-    def _load_with_wave(self, path: str) -> Tuple[np.ndarray, int]:
-        """Load audio using wave module."""
-        import wave
-
-        with wave.open(path, "rb") as wav_file:
-            sample_rate = wav_file.getframerate()
-            frames = wav_file.readframes(wav_file.getnframes())
-            waveform = np.frombuffer(frames, dtype=np.int16)
-
-            if wav_file.getnchannels() > 1:
-                waveform = waveform.reshape(-1, wav_file.getnchannels())
-
-            return waveform, sample_rate
-
 
 class ImageFileHandler(FileHandler):
     """Handler for image files."""

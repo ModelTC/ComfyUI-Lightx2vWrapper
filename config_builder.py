@@ -313,6 +313,7 @@ class ConfigBuilder:
         ("model_cls", None),
         ("model_path", None),
         ("task", None),
+        ("distill_method", None),
         ("t5_quantized", False),
         ("clip_quantized", False),
         ("lora_configs", None),

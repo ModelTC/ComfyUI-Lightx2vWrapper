@@ -1,8 +1,8 @@
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 0,
-  "last_node_id": 50,
-  "last_link_id": 49,
+  "last_node_id": 51,
+  "last_link_id": 50,
   "nodes": [
     {
       "id": 10,
@@ -32,16 +32,15 @@
         "Node name for S&R": "LightX2VQuantization"
       },
       "widgets_values": [
-        "sgl",
-        "fp8",
-        "fp8",
-        "fp16",
-        "fp8"
+        "fp8-sgl",
+        "fp8-sgl",
+        "fp8-sgl",
+        "fp8-sgl"
       ]
     },
     {
       "id": 11,
-      "type": "LightX2VConfigCombiner",
+      "type": "LightX2VConfigCombinerV3",
       "pos": [
         -1207.53271484375,
         111.63562774658203
@@ -51,7 +50,7 @@
         126
       ],
       "flags": {},
-      "order": 14,
+      "order": 16,
       "mode": 0,
       "inputs": [
         {
@@ -75,7 +74,7 @@
           "name": "memory_config",
           "shape": 7,
           "type": "MEMORY_CONFIG",
-          "link": null
+          "link": 50
         },
         {
           "name": "lora_chain",
@@ -88,41 +87,6 @@
           "shape": 7,
           "type": "TALK_OBJECTS_CONFIG",
           "link": 49
-        }
-      ],
-      "outputs": [
-        {
-          "name": "combined_config",
-          "type": "COMBINED_CONFIG",
-          "links": [
-            13
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LightX2VConfigCombiner"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 12,
-      "type": "LightX2VModularInference",
-      "pos": [
-        -818.747802734375,
-        89.00883483886719
-      ],
-      "size": [
-        400,
-        200
-      ],
-      "flags": {},
-      "order": 16,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "combined_config",
-          "type": "COMBINED_CONFIG",
-          "link": 13
         },
         {
           "name": "image",
@@ -134,7 +98,42 @@
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 15
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prepared_config",
+          "type": "PREPARED_CONFIG",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VConfigCombinerV3"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 12,
+      "type": "LightX2VModularInferenceV2",
+      "pos": [
+        -818.747802734375,
+        89.00883483886719
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prepared_config",
+          "type": "PREPARED_CONFIG",
+          "link": 13
         }
       ],
       "outputs": [
@@ -154,7 +153,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "LightX2VModularInference"
+        "Node name for S&R": "LightX2VModularInferenceV2"
       },
       "widgets_values": [
         "The video feature the person is talking.",
@@ -195,42 +194,8 @@
         "Node name for S&R": "LoadImage"
       },
       "widgets_values": [
-        "input (1).png",
+        "codex_two_person_input.png",
         "image"
-      ]
-    },
-    {
-      "id": 20,
-      "type": "LoadAudio",
-      "pos": [
-        -1618.51171875,
-        526.3804931640625
-      ],
-      "size": [
-        274.080078125,
-        136
-      ],
-      "flags": {},
-      "order": 10,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "AUDIO",
-          "type": "AUDIO",
-          "links": [
-            15
-          ]
-        }
-      ],
-      "title": "加载音频",
-      "properties": {
-        "Node name for S&R": "LoadAudio"
-      },
-      "widgets_values": [
-        "15.wav",
-        null,
-        null
       ]
     },
     {
@@ -337,8 +302,8 @@
       },
       "widgets_values": [
         "seko_talk",
-        "Wan2.1-R2V0909-Audio-14B-720P-fp8",
-        "i2v",
+        "SekoTalk-v2.7-fp8-step4-xt-490",
+        "rs2v",
         4,
         584734195,
         "randomize",
@@ -355,42 +320,6 @@
         81,
         5,
         false
-      ]
-    },
-    {
-      "id": 34,
-      "type": "easy showAnything",
-      "pos": [
-        -508.2369079589844,
-        -330.85296630859375
-      ],
-      "size": [
-        511.8559875488281,
-        291.96728515625
-      ],
-      "flags": {},
-      "order": 17,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "anything",
-          "shape": 7,
-          "type": "*",
-          "link": 42
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output",
-          "type": "*",
-          "links": []
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "easy showAnything"
-      },
-      "widgets_values": [
-        "TalkObjectsConfig(talk_objects=[{'name': 'person_1', 'audio': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_audio.wav', 'mask': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_mask.png', 'source_type': 'file'}, {'name': 'person_1', 'audio': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_audio.wav', 'mask': '/mnt/aigc/users/gaopeng1/ComfyUI/input/person_1_mask.png', 'source_type': 'file'}])"
       ]
     },
     {
@@ -423,7 +352,7 @@
         "Node name for S&R": "LoadAudio"
       },
       "widgets_values": [
-        "p2.mp3",
+        "audio_full_female_10s.wav",
         null,
         null
       ]
@@ -458,8 +387,8 @@
         "Node name for S&R": "LoadImageMask"
       },
       "widgets_values": [
-        "input_p2_mask.png",
-        "red",
+        "codex_two_person_input.png",
+        "blue",
         "image"
       ]
     },
@@ -493,77 +422,7 @@
         "Node name for S&R": "LoadImageMask"
       },
       "widgets_values": [
-        "input_p1_mask.png",
-        "red",
-        "image"
-      ]
-    },
-    {
-      "id": 41,
-      "type": "LoadAudio",
-      "pos": [
-        -1468.0582275390625,
-        -386.4920654296875
-      ],
-      "size": [
-        274.080078125,
-        136
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 4,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "AUDIO",
-          "type": "AUDIO",
-          "links": [
-            44
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadAudio"
-      },
-      "widgets_values": [
-        "15.wav",
-        null,
-        null
-      ]
-    },
-    {
-      "id": 42,
-      "type": "LoadImageMask",
-      "pos": [
-        -1477.0850830078125,
-        -332.2462463378906
-      ],
-      "size": [
-        274.080078125,
-        318
-      ],
-      "flags": {
-        "collapsed": false
-      },
-      "order": 3,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": [
-            45
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImageMask"
-      },
-      "widgets_values": [
-        "input_p3_mask.png",
+        "codex_two_person_input.png",
         "red",
         "image"
       ]
@@ -649,8 +508,7 @@
           "name": "talk_objects_config",
           "type": "TALK_OBJECTS_CONFIG",
           "links": [
-            42,
-            48
+            49
           ]
         }
       ],
@@ -744,50 +602,7 @@
         "Node name for S&R": "LightX2VTalkObjectInput"
       },
       "widgets_values": [
-        "person_1",
-        true
-      ]
-    },
-    {
-      "id": 46,
-      "type": "LightX2VTalkObjectInput",
-      "pos": [
-        -937.0840454101562,
-        -414.41925048828125
-      ],
-      "size": [
-        317.0162048339844,
-        102
-      ],
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 44
-        },
-        {
-          "name": "mask",
-          "shape": 7,
-          "type": "MASK",
-          "link": 45
-        }
-      ],
-      "outputs": [
-        {
-          "name": "talk_object",
-          "type": "TALK_OBJECT",
-          "links": []
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LightX2VTalkObjectInput"
-      },
-      "widgets_values": [
-        "person_1",
+        "person_2",
         true
       ]
     },
@@ -821,59 +636,21 @@
         "Node name for S&R": "LoadAudio"
       },
       "widgets_values": [
-        "p1.mp3",
+        "male_10s.wav",
         null,
         ""
       ]
     },
     {
-      "id": 48,
-      "type": "SetNode",
+      "id": 51,
+      "type": "LightX2VMemoryOptimization",
       "pos": [
-        -199.871337890625,
-        -578.7578735351562
+        -1750,
+        420
       ],
       "size": [
-        210,
-        60
-      ],
-      "flags": {},
-      "order": 18,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "TALK_OBJECTS_CONFIG",
-          "type": "TALK_OBJECTS_CONFIG",
-          "link": 48
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_talk_objects",
-      "properties": {
-        "previousName": "talk_objects"
-      },
-      "widgets_values": [
-        "talk_objects"
-      ],
-      "color": "#232",
-      "bgcolor": "#353"
-    },
-    {
-      "id": 50,
-      "type": "GetNode",
-      "pos": [
-        -1453.525390625,
-        249.66848754882812
-      ],
-      "size": [
-        210,
-        60
+        290,
+        420
       ],
       "flags": {},
       "order": 7,
@@ -881,20 +658,32 @@
       "inputs": [],
       "outputs": [
         {
-          "name": "TALK_OBJECTS_CONFIG",
-          "type": "TALK_OBJECTS_CONFIG",
+          "name": "memory_config",
+          "type": "MEMORY_CONFIG",
           "links": [
-            49
+            50
           ]
         }
       ],
-      "title": "Get_talk_objects",
-      "properties": {},
+      "properties": {
+        "Node name for S&R": "LightX2VMemoryOptimization"
+      },
       "widgets_values": [
-        "talk_objects"
-      ],
-      "color": "#232",
-      "bgcolor": "#353"
+        false,
+        100,
+        true,
+        true,
+        "block",
+        1.0,
+        true,
+        "model",
+        true,
+        true,
+        true,
+        true,
+        false,
+        false
+      ]
     }
   ],
   "links": [
@@ -920,23 +709,15 @@
       0,
       12,
       0,
-      "COMBINED_CONFIG"
+      "PREPARED_CONFIG"
     ],
     [
       14,
       19,
       0,
-      12,
-      1,
+      11,
+      6,
       "IMAGE"
-    ],
-    [
-      15,
-      20,
-      0,
-      12,
-      2,
-      "AUDIO"
     ],
     [
       18,
@@ -995,52 +776,28 @@
       "TALK_OBJECT"
     ],
     [
-      42,
-      43,
-      0,
-      34,
-      0,
-      "*"
-    ],
-    [
-      44,
-      41,
-      0,
-      46,
-      0,
-      "AUDIO"
-    ],
-    [
-      45,
-      42,
-      0,
-      46,
-      1,
-      "MASK"
-    ],
-    [
       47,
       47,
       0,
       44,
       0,
       "AUDIO"
-    ],
-    [
-      48,
-      43,
-      0,
-      48,
-      0,
-      "*"
     ],
     [
       49,
-      50,
+      43,
       0,
       11,
       5,
       "TALK_OBJECTS_CONFIG"
+    ],
+    [
+      50,
+      51,
+      0,
+      11,
+      3,
+      "MEMORY_CONFIG"
     ]
   ],
   "groups": [

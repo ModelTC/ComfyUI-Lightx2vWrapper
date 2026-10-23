@@ -1,94 +1,65 @@
 {
-    "1": {
-      "inputs": {
-        "video": "1954627330480766977_wan2-2.mp4",
-        "force_rate": 0,
-        "custom_width": 0,
-        "custom_height": 0,
-        "frame_load_cap": 0,
-        "skip_first_frames": 0,
-        "select_every_nth": 1,
-        "format": "AnimateDiff"
-      },
-      "class_type": "VHS_LoadVideo",
-      "_meta": {
-        "title": "Load Video (Upload) 🎥🅥🅗🅢"
-      }
+  "1": {
+    "inputs": {
+      "video": "飞书20260721-124954.mp4"
     },
-    "4": {
-      "inputs": {
-        "ckpt_name": "seedvr2_ema_3b_fp8.safetensors",
-        "precision": "fp8-sgl",
-        "cpu_offload": false,
-        "use_tiling_vae": true
-      },
-      "class_type": "LightX2VSeedVR2Loader",
-      "_meta": {
-        "title": "LightX2V SeedVR2 Loader"
-      }
+    "class_type": "LightX2VInputVideoPath",
+    "_meta": {
+      "title": "LightX2V Input Video Path (Upload)"
+    }
+  },
+  "2": {
+    "inputs": {
+      "ckpt_name": "seedvr2_ema_3b_fp8.safetensors",
+      "precision": "fp8-sgl",
+      "cpu_offload": false,
+      "use_tiling_vae": true,
+      "vae_tile_size": 1024,
+      "vae_tile_overlap": 64,
+      "vae_causal_slice_size": 4,
+      "vae_memory_limit_gb": 0.5
     },
-    "5": {
-      "inputs": {
-        "target_height": 1920,
-        "target_width": 1080,
-        "infer_steps": 1,
-        "segment_length": 81,
-        "segment_overlap": 1,
-        "seed": 3816942657,
-        "source_fps": 16,
-        "model": [
-          "4",
-          0
-        ],
-        "images": [
-          "1",
-          0
-        ]
-      },
-      "class_type": "LightX2VSeedVR2Sampler",
-      "_meta": {
-        "title": "LightX2V SeedVR2 Sampler"
-      }
+    "class_type": "LightX2VSeedVR2Loader",
+    "_meta": {
+      "title": "LightX2V SeedVR2 Loader"
+    }
+  },
+  "3": {
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "video_path": [
+        "1",
+        0
+      ],
+      "target_width": 1080,
+      "target_height": 1920,
+      "infer_steps": 1,
+      "segment_length": 81,
+      "segment_overlap": 1,
+      "seed": 3816942657,
+      "filename_prefix": "lightx2v_seedvr2/SeedVR2",
+      "color_fix": "gpu"
     },
-    "6": {
-      "inputs": {
-        "video_info": [
-          "1",
-          3
-        ]
-      },
-      "class_type": "VHS_VideoInfo",
-      "_meta": {
-        "title": "Video Info 🎥🅥🅗🅢"
-      }
+    "class_type": "LightX2VSeedVR2FileSampler",
+    "_meta": {
+      "title": "LightX2V SeedVR2 File Sampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "filename": [
+        "3",
+        0
+      ],
+      "validate_exists": true,
+      "mux_audio": false
     },
-    "7": {
-      "inputs": {
-        "frame_rate": [
-          "6",
-          0
-        ],
-        "loop_count": 0,
-        "filename_prefix": "AnimateDiff",
-        "format": "video/h264-mp4",
-        "pix_fmt": "yuv420p",
-        "crf": 19,
-        "save_metadata": true,
-        "trim_to_audio": false,
-        "pingpong": false,
-        "save_output": true,
-        "images": [
-          "5",
-          0
-        ],
-        "audio": [
-          "1",
-          2
-        ]
-      },
-      "class_type": "VHS_VideoCombine",
-      "_meta": {
-        "title": "Video Combine 🎥🅥🅗🅢"
-      }
+    "class_type": "LightX2VOutputVideoPreview",
+    "_meta": {
+      "title": "LightX2V Output Video Preview"
     }
   }
+}

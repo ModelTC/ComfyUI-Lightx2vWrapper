@@ -44,6 +44,39 @@ WRAPPER_TO_LIGHTX2V_FIELDS: Dict[str, str] = {
 # Attention type fans out to three internal slots in lightx2v.
 _ATTN_TYPE_SLOTS = ("self_attn_1_type", "cross_attn_1_type", "cross_attn_2_type")
 
+# LightX2V unified the dedicated distilled Wan runners into the regular Wan
+# runners in 23fc3d45.  Keep old ComfyUI workflows loadable by translating the
+# retired model class names to the new model class plus scheduler selector.
+_LEGACY_MODEL_CLASS_ALIASES = {
+    "wan2.1_distill": ("wan2.1", "dmd2"),
+    "wan2.1_mean_flow_distill": ("wan2.1", "mean_flow"),
+    "wan2.2_moe_distill": ("wan2.2_moe", "dmd2"),
+}
+
+
+def _add_wan22_branch_paths(model_path: str, updates: Dict[str, Any]) -> None:
+    """Expose Wan2.2's two transformer branches in the runner config.
+
+    Hugging Face model packages commonly keep the branches below
+    ``distill_models/`` while the unified runner accepts explicit branch
+    directories.  Supplying both path variants is harmless: the runner picks
+    the original or quantized key according to ``dit_quantized``.
+    """
+    if not model_path:
+        return
+
+    for branch in ("high_noise_model", "low_noise_model"):
+        candidates = (
+            os.path.join(model_path, branch),
+            os.path.join(model_path, "distill_models", branch),
+        )
+        branch_path = next((path for path in candidates if os.path.isdir(path)), None)
+        if branch_path is None:
+            continue
+        config_key = branch.removesuffix("_model")
+        updates.setdefault(f"{config_key}_original_ckpt", branch_path)
+        updates.setdefault(f"{config_key}_quantized_ckpt", branch_path)
+
 
 def apply_inference_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Translate inference widget values to a partial lightx2v config dict."""
@@ -65,9 +98,16 @@ def apply_inference_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
     # Wan2.2 MoE has two CFG scales (high/low noise) and a boundary param.
     model_cls = config.get("model_cls", "")
+    legacy_model = _LEGACY_MODEL_CLASS_ALIASES.get(model_cls)
+    if legacy_model is not None:
+        model_cls, distill_method = legacy_model
+        updates["model_cls"] = model_cls
+        updates["distill_method"] = distill_method
+
     if "wan2.2_moe" in model_cls:
         updates["boundary"] = 0.9
         updates["sample_guide_scale"] = [config.get("cfg_scale"), config.get("cfg_scale2")]
+        _add_wan22_branch_paths(config.get("model_path", ""), updates)
     if "wan2.2" in model_cls:
         updates["use_image_encoder"] = False
 

@@ -42,7 +42,7 @@ class LightX2VInferenceConfig:
                     ["t2v", "i2v", "s2v", "rs2v"],
                     {
                         "default": "i2v",
-                        "tooltip": "Task type: text-to-video or image-to-video or reference_image and audio to video (shot)",
+                        "tooltip": "Task: t2v text-to-video, i2v image-to-video, s2v image+audio-to-video, or rs2v reference-shot image+audio-to-video",
                     },
                 ),
                 "infer_steps": (
@@ -136,7 +136,7 @@ class LightX2VInferenceConfig:
                     ],
                     {
                         "default": "adaptive",
-                        "tooltip": "Adaptive resize input image to target aspect ratio",
+                        "tooltip": "Resize policy: adaptive preserves the target area, fixed_shape uses the exact target size, and fixed-area/min-side modes preserve aspect ratio",
                     },
                 ),
                 "fixed_area": (
@@ -161,7 +161,7 @@ class LightX2VInferenceConfig:
                         "default": 5,
                         "min": 0,
                         "max": 16,
-                        "tooltip": "Previous frame overlap for sekotalk models",
+                        "tooltip": "Previous-frame overlap for rs2v continuation; s2v uses the model's own initial reference and usually ignores this value",
                     },
                 ),
                 "use_tiny_vae": (

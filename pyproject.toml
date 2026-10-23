@@ -2,6 +2,8 @@
 name = "lightx2vwrapper"
 description = "ComfyUI-Lightx2vWrapper is an inference wrapper for Lightx2v designed for use with ComfyUI."
 version = "1.1.0"
+readme = "README.md"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 
 [project.urls]
@@ -19,10 +21,8 @@ line-length = 150
 indent-width = 4
 
 [tool.ruff.lint]
-extend-select = ["I", "F401"]
-ignore = ["F"]
+extend-select = ["I"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["F401"]
 "**/lightx2v_kernel/*" = ["F401"]
-"**/{cookbook,docs}/*" = ["E402", "F401", "F811", "F841"]
