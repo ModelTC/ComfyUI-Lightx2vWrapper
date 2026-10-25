@@ -11,7 +11,8 @@ import folder_paths
 import torch
 from comfy.utils import ProgressBar
 
-from ._lightx2v_runner import build_runner, run_request
+from ._lightx2v_runner import run_request
+from ._runner_memory import get_runner, make_runner_handle
 from .file_input import probe_video_file, resolve_input_video_path
 from .seedvr import _prepare_output_video
 
@@ -211,7 +212,7 @@ class LightX2VSwiftVRLoader:
             "parallel": False,
             "use_compile": bool(use_compile),
         }
-        runner = build_runner(config)
+        model = make_runner_handle(config, model_name=model_name)
         logger.info(
             "[SwiftVRLoader] loaded %s; attention=%s, rope=%s, clip=%s, overlap=%s, reae_batch=%s, compile=%s",
             model_name,
@@ -222,7 +223,7 @@ class LightX2VSwiftVRLoader:
             reae_frame_batch_size,
             use_compile,
         )
-        return ({"runner": runner, "model_name": model_name},)
+        return (model,)
 
 
 class LightX2VSwiftVRSampler:
@@ -310,7 +311,7 @@ class LightX2VSwiftVRSampler:
             sr_ratio,
         )
 
-        runner = model["runner"]
+        runner = get_runner(model)
         output_file = ""
         output_subfolder = ""
         temp_dir = None
@@ -485,7 +486,7 @@ class LightX2VSwiftVRFileSampler:
             "ffmpeg_preset": str(ffmpeg_preset),
         }
 
-        runner = model["runner"]
+        runner = get_runner(model)
         progress = ProgressBar(100)
         logger.info(
             "[SwiftVRFileSampler] input=%s (%sx%s @ %.3f fps), output=%sx%s",

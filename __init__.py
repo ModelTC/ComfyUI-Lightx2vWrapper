@@ -44,5 +44,8 @@ _setup_env()
 _register_lightx2v_submodule()
 
 from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS  # noqa: E402
+from .nodes._runner_memory import install_comfyui_memory_hook  # noqa: E402
+
+install_comfyui_memory_hook()
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

@@ -29,7 +29,8 @@ import folder_paths
 import torch
 from comfy.utils import ProgressBar
 
-from ._lightx2v_runner import build_runner, run_request
+from ._lightx2v_runner import run_request
+from ._runner_memory import get_runner, make_runner_handle
 from .file_input import probe_video_file, resolve_input_video_path
 
 logger = logging.getLogger(__name__)
@@ -373,7 +374,7 @@ class LightX2VSeedVR2Loader:
         else:
             config["dit_original_ckpt"] = str(ckpt_path)
 
-        runner = build_runner(config)
+        model = make_runner_handle(config, precision=precision, ckpt=ckpt_name)
         logger.info(
             "[SeedVR2Loader] loaded %s (%s); cpu_offload=%s, tile_vae=%s, tile=%s, overlap=%s, slice=%s, mem_limit=%sGiB",
             ckpt_name,
@@ -385,7 +386,7 @@ class LightX2VSeedVR2Loader:
             vae_causal_slice_size,
             vae_memory_limit_gb,
         )
-        return ({"runner": runner, "precision": precision, "ckpt": ckpt_name},)
+        return (model,)
 
 
 class LightX2VSeedVR2Sampler:
@@ -463,7 +464,7 @@ class LightX2VSeedVR2Sampler:
         filename_prefix,
         color_fix,
     ):
-        runner = model["runner"]
+        runner = get_runner(model)
 
         if int(infer_steps) != 1:
             raise ValueError("SeedVR2 requires infer_steps=1")
@@ -644,7 +645,7 @@ class LightX2VSeedVR2FileSampler:
             "color_fix": str(color_fix),
         }
 
-        runner = model["runner"]
+        runner = get_runner(model)
         progress = ProgressBar(100)
         logger.info(
             "[SeedVR2FileSampler] input=%s (%sx%s @ %.3f fps), target=%sx%s, segment=%s/%s",

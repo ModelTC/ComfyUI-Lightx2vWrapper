@@ -48,6 +48,8 @@ def temporary_runner_config(runner, values):
 
 def run_request(runner, request, *, runtime_config=None):
     """Validate one modern request and execute it through the runner API."""
-    with temporary_runner_config(runner, runtime_config or {}):
+    from ._runner_memory import active_lightx2v_request
+
+    with active_lightx2v_request(), temporary_runner_config(runner, runtime_config or {}):
         input_info = runner.prepare_request(dict(request))
         return runner.run_request(input_info)
