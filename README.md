@@ -67,6 +67,21 @@ Qwen Image, and SeedVR2. The retired `*_distill` values remain selectable as
 compatibility aliases for saved ComfyUI workflows and are normalized before
 LightX2V's runner is built.
 
+The wrapper keeps one LightX2V GPU runner resident across these node groups.
+Switching between Wan/SekoTalk and SeedVR2/SwiftVR releases the previous
+runner before loading the next one. Cached restoration loader outputs remain
+usable; their runner is rebuilt when selected again.
+
+When LightX2V loads a runner, it asks ComfyUI to unload its resident models
+first. When ComfyUI next frees GPU memory for one of its own models, the wrapper
+evicts the resident LightX2V runner. This also applies to cached restoration
+loader outputs; they rebuild their runner on the next sampler call. An active
+LightX2V request is protected from eviction until it finishes. Switching
+models can therefore incur a reload, but resident model allocations do not
+accumulate across the two model managers. This hook uses ComfyUI's
+`model_management.free_memory` entry point; changes to that internal API
+require revalidation.
+
 ## Model files
 
 Place each model in its own directory under `ComfyUI/models/lightx2v/`. LoRA

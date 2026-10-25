@@ -63,12 +63,16 @@ class LightX2VModularInferenceV2:
 
     @classmethod
     def _release_runner(cls):
-        """Drop the singleton runner + force VRAM teardown via DefaultRunner.__del__.
+        """Drop the singleton runner and its GPU modules before another load.
 
         Callers MUST drop their own local refs to the old runner *before* invoking
         this — otherwise the refcount stays > 0, __del__ doesn't fire, and the
         next model load OOMs (model_a + model_b alive on GPU at the same time).
         """
+        from ._runner_memory import dispose_runner
+
+        gc.unfreeze()
+        dispose_runner(cls._current_runner)
         cls._current_runner = None
         cls._current_config_hash = None
         gc.collect()
@@ -211,6 +215,13 @@ class LightX2VModularInferenceV2:
                     # switching v2.5 s2v -> v2.7 rs2v).
                     current_runner = None
                     self._release_runner()
+                # ComfyUI may still cache SwiftVR/SeedVR loader outputs from a
+                # prior workflow.  Evict those GPU runners before loading a
+                # Wan/SekoTalk model, while retaining rebuildable handles.
+                from ._runner_memory import release_restoration_runners, unload_comfyui_models
+
+                release_restoration_runners()
+                unload_comfyui_models()
                 if config.get("task") == "rs2v":
                     from ..lightx2v.lightx2v.shot_runner.rs2v_infer import ShotRS2VPipeline
 
@@ -252,30 +263,29 @@ class LightX2VModularInferenceV2:
             config["return_result_tensor"] = True
             config["save_result_path"] = ""
             config["negative_prompt"] = config.get("negative_prompt", "")
-            if config.get("task") == "rs2v":
-                # ShotRS2VPipeline delegates request validation to its clip
-                # runner.  Passing the prepared config wholesale worked with
-                # the old InputInfo path, but LightX2V 0.6 rejects startup
-                # fields (model paths, quantization flags, etc.) as request
-                # fields.  Filter the request against the modern runner schema
-                # before handing it to the shot pipeline.
-                if _modern_build_runner is not None and _modern_build_startup_config is not None:
-                    shot_runner = current_runner.clip_generators["rs2v_clip"]
-                    request_data = self._build_modern_request(config, shot_runner)
-                    result_dict = current_runner.run_pipeline(request_data)
+            from ._runner_memory import active_lightx2v_request
+
+            with active_lightx2v_request():
+                if config.get("task") == "rs2v":
+                    # ShotRS2VPipeline delegates request validation to its clip
+                    # runner. Filter prepared config against the request schema.
+                    if _modern_build_runner is not None and _modern_build_startup_config is not None:
+                        shot_runner = current_runner.clip_generators["rs2v_clip"]
+                        request_data = self._build_modern_request(config, shot_runner)
+                        result_dict = current_runner.run_pipeline(request_data)
+                    else:
+                        result_dict = current_runner.run_pipeline(config)
+                elif _modern_build_runner is not None and _modern_build_startup_config is not None:
+                    request_data = self._build_modern_request(config, current_runner)
+                    input_info = current_runner.prepare_request(request_data)
+                    result_dict = current_runner.run_request(input_info)
                 else:
-                    result_dict = current_runner.run_pipeline(config)
-            elif _modern_build_runner is not None and _modern_build_startup_config is not None:
-                request_data = self._build_modern_request(config, current_runner)
-                input_info = current_runner.prepare_request(request_data)
-                result_dict = current_runner.run_request(input_info)
-            else:
-                if _legacy_init_empty_input_info is None or _legacy_update_input_info_from_dict is None:
-                    raise RuntimeError("No compatible LightX2V input-info API found in the installed LightX2V submodule")
-                input_data = _legacy_init_empty_input_info(config.task)
-                _legacy_update_input_info_from_dict(input_data, config)
-                current_runner.set_config(config)
-                result_dict = current_runner.run_pipeline(input_data)
+                    if _legacy_init_empty_input_info is None or _legacy_update_input_info_from_dict is None:
+                        raise RuntimeError("No compatible LightX2V input-info API found in the installed LightX2V submodule")
+                    input_data = _legacy_init_empty_input_info(config.task)
+                    _legacy_update_input_info_from_dict(input_data, config)
+                    current_runner.set_config(config)
+                    result_dict = current_runner.run_pipeline(input_data)
 
             images = result_dict.get("video", None)
             audio = result_dict.get("audio", None)

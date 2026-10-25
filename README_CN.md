@@ -61,6 +61,17 @@ git submodule update --init --recursive
 变体、SekoTalk、Qwen Image 和 SeedVR2。旧 workflow 使用的 `*_distill`
 值仍作为兼容别名保留，构建 LightX2V runner 前会自动归一化。
 
+这些节点组共用一个常驻的 LightX2V GPU runner。Wan/SekoTalk 与
+SeedVR2/SwiftVR 切换时，插件先释放旧 runner，再加载新模型；ComfyUI
+缓存的超分加载器输出仍可复用，再次使用时会重建 runner。
+
+LightX2V 加载 runner 前会先让 ComfyUI 卸载它管理的常驻模型；ComfyUI
+随后为原生模型清理 GPU 显存时，插件会释放 LightX2V 的常驻 runner。
+缓存的超分加载器输出会在下次采样时重建 runner。正在运行的 LightX2V
+推理不会被中途卸载。切换模型需要重新加载，但两套模型管理器的常驻模型
+显存不会因连续切换而一直累积。该机制接入 ComfyUI 的
+`model_management.free_memory`；此内部接口变动时需要重新验证。
+
 ## 模型目录
 
 每个模型放在 `ComfyUI/models/lightx2v/` 下的独立目录中。LoRA 可以放在
