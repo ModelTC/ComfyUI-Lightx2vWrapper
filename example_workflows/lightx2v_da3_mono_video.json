@@ -1,0 +1,191 @@
+{
+  "id": "lightx2v-da3-mono-example",
+  "revision": 0,
+  "last_node_id": 4,
+  "last_link_id": 3,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LightX2VInputVideoPath",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "video_path",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VInputVideoPath"
+      },
+      "widgets_values": [
+        "example.mp4"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LightX2VDA3MonoLoader",
+      "pos": [
+        0,
+        300
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "DA3_MONO_MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VDA3MonoLoader"
+      },
+      "widgets_values": [
+        "depth_anything_3_mono_large.safetensors",
+        504,
+        "upper_bound_resize",
+        "torch_sdpa",
+        "auto",
+        "torch",
+        false
+      ]
+    },
+    {
+      "id": 3,
+      "type": "LightX2VDA3MonoVideoSampler",
+      "pos": [
+        420,
+        100
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "DA3_MONO_MODEL",
+          "link": 1
+        },
+        {
+          "name": "video_path",
+          "type": "STRING",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "filename",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "data_npz",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VDA3MonoVideoSampler"
+      },
+      "widgets_values": [
+        "lightx2v_da3/DA3Mono",
+        false,
+        false
+      ]
+    },
+    {
+      "id": 4,
+      "type": "LightX2VOutputVideoPreview",
+      "pos": [
+        850,
+        100
+      ],
+      "size": [
+        330,
+        180
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "filename",
+          "type": "STRING",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "filename",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LightX2VOutputVideoPreview"
+      },
+      "widgets_values": [
+        true,
+        false
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      3,
+      0,
+      "DA3_MONO_MODEL"
+    ],
+    [
+      2,
+      1,
+      0,
+      3,
+      1,
+      "STRING"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

@@ -9,6 +9,7 @@ Each submodule groups a category of nodes:
 - ``file_input``: validated, upload-backed media paths
 - ``seedvr``    : SeedVR2 super-resolution runner
 - ``swiftvr``   : SwiftVR restoration runner
+- ``depth_anything3``: DA3 MONO image and video depth inference
 """
 
 from .combiner import (
@@ -21,6 +22,7 @@ from .config import (
     LightX2VQuantization,
     LightX2VTeaCache,
 )
+from .depth_anything3 import LightX2VDA3MonoImageSampler, LightX2VDA3MonoLoader, LightX2VDA3MonoVideoSampler
 from .file_input import LightX2VInputVideoPath
 from .inference import LightX2VModularInferenceV2
 from .lora import LightX2VLoRALoader
@@ -50,6 +52,9 @@ NODE_CLASS_MAPPINGS = {
     "LightX2VSwiftVRSampler": LightX2VSwiftVRSampler,
     "LightX2VSwiftVRFileSampler": LightX2VSwiftVRFileSampler,
     "LightX2VOutputVideoPreview": LightX2VOutputVideoPreview,
+    "LightX2VDA3MonoLoader": LightX2VDA3MonoLoader,
+    "LightX2VDA3MonoImageSampler": LightX2VDA3MonoImageSampler,
+    "LightX2VDA3MonoVideoSampler": LightX2VDA3MonoVideoSampler,
     "LightX2VTalkObjectInput": TalkObjectInput,
     "LightX2VTalkObjectsCombiner": TalkObjectsCombiner,
     "LightX2VTalkObjectsFromJSON": TalkObjectsFromJSON,
@@ -73,6 +78,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LightX2VSwiftVRSampler": "LightX2V SwiftVR Sampler",
     "LightX2VSwiftVRFileSampler": "LightX2V SwiftVR File Sampler",
     "LightX2VOutputVideoPreview": "LightX2V Output Video Preview",
+    "LightX2VDA3MonoLoader": "LightX2V DA3 MONO Loader",
+    "LightX2VDA3MonoImageSampler": "LightX2V DA3 MONO Image Sampler",
+    "LightX2VDA3MonoVideoSampler": "LightX2V DA3 MONO Video Sampler",
     "LightX2VTalkObjectInput": "LightX2V Talk Object Input (Single)",
     "LightX2VTalkObjectsCombiner": "LightX2V Talk Objects Combiner",
     "LightX2VTalkObjectsFromFiles": "LightX2V Talk Objects From Files",

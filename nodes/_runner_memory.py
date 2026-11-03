@@ -40,6 +40,10 @@ def dispose_runner(runner):
     """Drop GPU modules even when an upstream callback still references runner."""
     if runner is None:
         return
+    if getattr(getattr(runner, "config", None), "get", lambda _key: None)("model_cls") == "depth_anything3":
+        # DA3 owns captured CUDA Graph allocations in addition to its model.
+        runner.close()
+        return
     children = getattr(runner, "clip_generators", None)
     if isinstance(children, dict):
         for child in children.values():

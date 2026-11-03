@@ -23,6 +23,8 @@ The repository includes runnable workflow examples under
 - [SeedVR2](example_workflows/lightx2v_seedvr.json) video restoration
 - [SwiftVR image](example_workflows/lightx2v_swiftvr_image.json) and [SwiftVR
   video](example_workflows/lightx2v_swiftvr_video.json) restoration
+- [DA3 MONO image](example_workflows/lightx2v_da3_mono_image.json) and [DA3 MONO
+  video](example_workflows/lightx2v_da3_mono_video.json) relative depth
 
 The examples are versioned with the wrapper and are the best reference for
 current node names and connections.
@@ -59,6 +61,9 @@ and place them under `ComfyUI/models/lightx2v/`.
   combiners.
 - **Video inputs and restoration:** `LightX2VInputVideoPath`, SeedVR2 and
   SwiftVR loaders/samplers, plus `LightX2VOutputVideoPreview`.
+- **Depth Anything 3 MONO:** `LightX2VDA3MonoLoader`, image sampler returning a
+  depth `IMAGE` and sky `MASK`, and streaming video sampler returning an MP4
+  path for `LightX2VOutputVideoPreview`.
 - **LoRA:** `LightX2VLoRALoader`.
 
 The inference node currently accepts the model classes exposed by
@@ -68,7 +73,7 @@ compatibility aliases for saved ComfyUI workflows and are normalized before
 LightX2V's runner is built.
 
 The wrapper keeps one LightX2V GPU runner resident across these node groups.
-Switching between Wan/SekoTalk and SeedVR2/SwiftVR releases the previous
+Switching between Wan/SekoTalk, SeedVR2/SwiftVR, and DA3 MONO releases the previous
 runner before loading the next one. Cached restoration loader outputs remain
 usable; their runner is rebuilt when selected again.
 
@@ -84,7 +89,15 @@ require revalidation.
 
 ## Model files
 
-Place each model in its own directory under `ComfyUI/models/lightx2v/`. LoRA
+Place each model in its own directory under `ComfyUI/models/lightx2v/`. DA3 MONO
+uses `ComfyUI/models/geometry_estimation/depth_anything_3_mono_large.safetensors`;
+the official checkpoint is also accepted as
+`ComfyUI/models/geometry_estimation/DA3MONO-LARGE/model.safetensors`. The DA3
+loader exposes internal resolution, longest/shortest-side resize or crop,
+attention backend, backbone dtype, norm backend, and CUDA Graph controls. The
+image sampler returns a preview at the input resolution; the video sampler
+streams frames to MP4 and preserves source audio. Numeric NPY/NPZ output is
+optional and disabled by default. LoRA
 files can be placed in either `ComfyUI/models/lightx2v/loras/` or
 `ComfyUI/models/loras/`.
 
