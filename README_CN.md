@@ -22,6 +22,8 @@
 - [SeedVR2](example_workflows/lightx2v_seedvr.json) 视频修复
 - [SwiftVR 图像](example_workflows/lightx2v_swiftvr_image.json) 和 [SwiftVR
   视频](example_workflows/lightx2v_swiftvr_video.json) 修复
+- [DA3 MONO 图像](example_workflows/lightx2v_da3_mono_image.json) 和 [DA3 MONO
+  视频](example_workflows/lightx2v_da3_mono_video.json) 相对深度
 
 示例工作流会随封装器一起更新，可作为当前节点名称和连线方式的参考。
 
@@ -55,6 +57,8 @@ git submodule update --init --recursive
 - **Talk 输入：** 单对象、文件列表、JSON 和多人 Talk 组合节点
 - **视频输入与修复：** `LightX2VInputVideoPath`、SeedVR2/SwiftVR 加载器与
   采样器、`LightX2VOutputVideoPreview`
+- **Depth Anything 3 MONO：** `LightX2VDA3MonoLoader`、返回深度 `IMAGE` 和天空
+  `MASK` 的单图采样器、流式写出 MP4 的视频采样器
 - **LoRA：** `LightX2VLoRALoader`
 
 推理节点当前支持 `model_utils.support_model_cls_list` 中的 Wan 2.1/2.2
@@ -62,7 +66,7 @@ git submodule update --init --recursive
 值仍作为兼容别名保留，构建 LightX2V runner 前会自动归一化。
 
 这些节点组共用一个常驻的 LightX2V GPU runner。Wan/SekoTalk 与
-SeedVR2/SwiftVR 切换时，插件先释放旧 runner，再加载新模型；ComfyUI
+SeedVR2/SwiftVR/DA3 MONO 切换时，插件先释放旧 runner，再加载新模型；ComfyUI
 缓存的超分加载器输出仍可复用，再次使用时会重建 runner。
 
 LightX2V 加载 runner 前会先让 ComfyUI 卸载它管理的常驻模型；ComfyUI
@@ -74,7 +78,13 @@ LightX2V 加载 runner 前会先让 ComfyUI 卸载它管理的常驻模型；Com
 
 ## 模型目录
 
-每个模型放在 `ComfyUI/models/lightx2v/` 下的独立目录中。LoRA 可以放在
+每个模型放在 `ComfyUI/models/lightx2v/` 下的独立目录中。DA3 MONO 使用
+`ComfyUI/models/geometry_estimation/depth_anything_3_mono_large.safetensors`，
+也接受官方格式的 `ComfyUI/models/geometry_estimation/DA3MONO-LARGE/model.safetensors`。
+加载节点可设置内部处理分辨率、最长/最短边的 resize/crop、注意力后端、
+骨干精度、归一化后端和 CUDA Graph。图像节点输出与输入同尺寸的深度预览，
+视频节点逐帧推理并写出 MP4，同时保留源音轨。浮点 NPY/NPZ 默认不保存。
+LoRA 可以放在
 `ComfyUI/models/lightx2v/loras/` 或 `ComfyUI/models/loras/`：
 
 ```text
